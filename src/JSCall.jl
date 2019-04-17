@@ -3,8 +3,6 @@ module JSCall
 using WebIO, JSExpr
 import WebIO: tojs
 
-
-
 """
 References objects stored in Javascript.
 Maps the following expressions to actual calls on the Javascript side:
@@ -45,12 +43,13 @@ mutable struct JSObject
 end
 
 """
-WebIO seems to purposefully not show symbols as variables
+WebIO seems to purposefully not show symbols as variables, so we need our own Sym
 """
 struct Sym
     symbol::Symbol
+    Sym(x) = new(Symbol(x))
 end
-Sym(x) = Sym(Symbol(x))
+
 const object_pool_identifier = Sym("window.object_pool")
 
 """
@@ -80,7 +79,7 @@ Copy constructor with a new `typ`
 function JSObject(jso::JSObject, typ::Symbol)
     jsonew = JSObject(name(jso), scope(jso), typ)
     # point new object to old one on the javascript side:
-    evaljs(jso, js"$jsonew = $jso")
+    evaljs(jso, js"$jsonew = $jso; undefined;")
     return jsonew
 end
 
@@ -149,6 +148,7 @@ function Base.getproperty(jso::JSObject, field::Symbol)
             result = result.bind(object)
         }
         $(object_pool_identifier)[$(uuidstr(result))] = result
+        undefined
         """
         evaljs(jso, js)
         return result
@@ -156,21 +156,29 @@ function Base.getproperty(jso::JSObject, field::Symbol)
 end
 
 function Base.setproperty!(jso::JSObject, name::Symbol, val)
-    evaljs(jso, js"$(jso).$(Sym(name)) = $val)")
+    evaljs(jso, js"$(jso).$(Sym(name)) = $val; undefined;")
     return val
 end
 
-modifier(jso::JSObject) = getfield(jso, :typ) === :new ? Sym("new ") : Sym("")
+modifier(jso::JSObject) = getfield(jso, :typ) === :new ? "new " : ""
 
 """
 Constructs the arguments for a JS call
 """
 function get_args(args, kw_args)
     if isempty(kw_args)
-        isempty(args) && return Sym("")
-        return join(tojs.(args), ", ")
+        return join(map(x-> sprint(io-> WebIO.showjs(io, tojs(x))), args), ", ")
     elseif isempty(args)
-        return tojs(Dict(kw_args))
+        # tojs isn't recursive bug:
+        return sprint() do io
+            print(io, '{')
+            for (k, v) in kw_args
+                print(io, k, ':')
+                WebIO.showjs(io, tojs(v))
+                print(io, ',')
+            end
+            print(io, '}')
+        end
     else
         # TODO: I'm not actually sure about this :D
         error("""
@@ -187,17 +195,18 @@ Call overload for JSObjects.
 Only supports keyword arguments OR positional arguments.
 """
 function (jso::JSObject)(args...; kw_args...)
-      result = JSObject(:result, scope(jso), :call)
-      input_args = get_args(args, kw_args)
-      js = js"""
-      var func = $(jso)
-      var result = $(modifier(jso))func(
+    result = JSObject(:result, scope(jso), :call)
+    input_args = get_args(args, kw_args)
+    js = """
+    var func = $(tojs(jso))
+    var result = $(modifier(jso))func(
         $input_args
-      )
-      $(object_pool_identifier)[\"$(uuid(result))\"] = result
-      """
-      evaljs(jso, js)
-      return result
+    )
+    $(object_pool_identifier.symbol)[\"$(uuid(result))\"] = result
+    undefined;
+    """
+    evaljs(jso, js)
+    return result
 end
 
 
@@ -217,7 +226,6 @@ function JSModule(name::Symbol, url::String)
         $(object_pool_identifier)[$(uuidstr(document))] = document
     }
     """
-    println(js)
     onimport(scope, js)
     return mod, document
 end
