@@ -100,6 +100,7 @@ function WebIO.evaljs(
         jso::JSObject, js::Union{JSString, AbstractString};
         try_fetch = false, try_seconds = 2
     )
+    println(js)
     task = evaljs(scope(jso), tojsexpr(js))
     if try_fetch
         start = time()
@@ -140,7 +141,7 @@ function Base.getproperty(jso::JSObject, field::Symbol)
     else
         # allocate result object:
         result = JSObject(field, scope(jso), typ(jso))
-        js = """
+        js = js"""
         var object = $jso
         var result = object.$(Sym(field))
         // if result is a class method, we need to bind it to the parent object
@@ -166,6 +167,7 @@ Constructs the arguments for a JS call
 """
 function get_args(args, kw_args)
     if isempty(kw_args)
+        isempty(args) && return Sym("")
         return join(tojs.(args), ", ")
     elseif isempty(args)
         return tojs(Dict(kw_args))
@@ -209,11 +211,11 @@ function JSModule(name::Symbol, url::String)
     mod = JSObject(name, scope, :module)
     document = JSObject(:document, scope, :module)
     js = js"""
-    function (mod)
+    function (mod){
         $(object_pool_identifier) = {}
         $(object_pool_identifier)[$(uuidstr(mod))] = mod
         $(object_pool_identifier)[$(uuidstr(document))] = document
-    end
+    }
     """
     println(js)
     onimport(scope, js)
