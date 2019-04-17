@@ -3,6 +3,10 @@ uuid = "7408c33d-3899-58ec-b6f6-b7e67cfb9908"
 authors = ["SimonDanisch <sdanisch@gmail.com>"]
 version = "0.1.0"
 
+[deps]
+JSExpr = "97c1335a-c9c5-57fe-bc5d-ec35cebe8660"
+WebIO = "0f1e0344-ec1d-5b48-a673-e5cf874b6c29"
+
 [extras]
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
