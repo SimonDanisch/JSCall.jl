@@ -213,6 +213,14 @@ function (jso::JSObject)(args...; kw_args...)
     return result
 end
 
+"""
+Indicates that no value is in an observable.
+Sentinel needed to check if an Observable got a new value.
+Can't use nothing, since the value itself could be nothing.
+"""
+struct NoValue end
+
+JSON.lower(x::NoValue) = ""
 
 """
     Module(name::Symbol, url::String)
@@ -221,17 +229,21 @@ Wraps a Javascript library.
 """
 function JSModule(name::Symbol, url::String)
     scope = Scope(imports = [url])
+    Observable{Any}(scope, "_jscall_value_comm", NoValue())
     mod = JSObject(name, scope, :module)
     document = JSObject(:document, scope, :module)
+    window = JSObject(:window, scope, :module)
+
     js = js"""
     function (mod){
         $(object_pool_identifier) = {}
         $(object_pool_identifier)[$(uuidstr(mod))] = mod
         $(object_pool_identifier)[$(uuidstr(document))] = document
+        $(object_pool_identifier)[$(uuidstr(window))] = window
     }
     """
     onimport(scope, js)
-    return mod, document
+    return mod, document, window
 end
 
 using JSExpr: jsexpr
@@ -255,6 +267,25 @@ macro jsfun(expr)
     return Expr(:function, Expr(:call, esc(func[1]), func[2:end]...), expr)
 end
 
-export JSObject, JSModule, scope, @jsfun
+"""
+    jlvalue(jso::JSObject)
+
+Fetches the Julia value representing a certin JSObject
+"""
+function jlvalue(jso::JSObject)
+    obs, sync = scope(jso).observs["_jscall_value_comm"]
+    obs[] = NoValue()
+    evaljs(jso, @js($obs[] = $jso))
+    timeout = 5 # wait at most 5 seconds
+    start = time()
+    yield() # maybe we can already get the value on first iteration
+    while time() - start < timeout
+        obs[] !== NoValue() && return obs[]
+        sleep(0.001)
+    end
+    error("Timed out while trying to fetch value")
+end
+
+export JSObject, JSModule, scope, @jsfun, jlvalue
 
 end # module
