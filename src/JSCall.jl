@@ -99,7 +99,6 @@ function WebIO.evaljs(
         jso::JSObject, js::Union{JSString, AbstractString};
         try_fetch = false, try_seconds = 2
     )
-    println(js)
     task = evaljs(scope(jso), tojsexpr(js))
     if try_fetch
         start = time()
