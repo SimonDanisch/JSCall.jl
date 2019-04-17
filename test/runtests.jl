@@ -6,6 +6,7 @@ THREE, document = JSModule(
     "https://cdnjs.cloudflare.com/ajax/libs/three.js/103/three.js",
 )
 (scope(THREE))(dom"div#container"())
+evaljs(THREE, "alert('hi')")
 
 scene = THREE.new.Scene()
 width, height = 500, 500
@@ -20,3 +21,10 @@ cube = THREE.new.Mesh(geometry, material);
 scene.add(cube)
 container = document.querySelector("#container")
 container.appendChild(renderer.domElement)
+
+for r in LinRange(0.0, 2pi, 200)
+    cube.rotation.x = r
+    cube.rotation.y = r
+    renderer.render(scene, camera)
+    sleep(0.01)
+end
