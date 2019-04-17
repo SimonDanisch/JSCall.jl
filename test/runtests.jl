@@ -1,5 +1,6 @@
 using JSCall, WebIO, JSExpr
 using Test
+using JSExpr: jsexpr
 using JSCall
 using WebIO
 THREE, document = JSModule(
@@ -22,9 +23,15 @@ container = document.querySelector("#container")
 container.appendChild(renderer.domElement)
 display((scope(THREE))(dom"div#container"()))
 
-for r in LinRange(0.0, 2pi, 200)
-    cube.rotation.x = r
-    cube.rotation.y = r
+@jsfun function render(unused)
+    @var cube = $cube
+    @var renderer = $renderer
+    @var scene = $scene
+    @var camera = $camera
+    cube.rotation.x += 0.01
+    cube.rotation.y += 0.01
     renderer.render(scene, camera)
-    sleep(0.01)
+    requestAnimationFrame(render)
 end
+
+render(scene)

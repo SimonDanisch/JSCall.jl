@@ -2,6 +2,7 @@ module JSCall
 
 using WebIO, JSExpr
 import WebIO: tojs
+using JSON
 
 """
 References objects stored in Javascript.
@@ -99,7 +100,8 @@ function WebIO.evaljs(
         jso::JSObject, js::Union{JSString, AbstractString};
         try_fetch = false, try_seconds = 2
     )
-    task = evaljs(scope(jso), tojsexpr(js))
+    jse = tojsexpr(js)
+    task = evaljs(scope(jso), jse)
     if try_fetch
         start = time()
         while (time() - start) <= try_seconds
@@ -114,6 +116,9 @@ end
 WebIO.showjs(io::IO, sym::Sym) = print(io, sym.symbol)
 # Make interpolation work for JSObject
 function WebIO.tojs(jso::JSObject)
+    return js"$(object_pool_identifier)[$(uuidstr(jso))]"
+end
+function JSON.lower(jso::JSObject)
     return js"$(object_pool_identifier)[$(uuidstr(jso))]"
 end
 
@@ -229,7 +234,27 @@ function JSModule(name::Symbol, url::String)
     return mod, document
 end
 
+using JSExpr: jsexpr
 
-export JSObject, JSModule, scope
+macro jsfun(expr)
+    func = copy(expr.args[1].args)
+    arguments = func[2:end]
+    jss = JSExpr.jsstring(expr)
+    expr = quote
+        args = ($(arguments...),)
+        idx = findfirst(x-> x isa JSObject, args)
+        idx === nothing && error("At least one argument needs to be of type JSObject")
+        jso = args[idx]
+        s = scope(jso)
+        any(x-> x isa JSObject && (scope(x) !== s), args) && error("All JSObjects need to come from the same Scope")
+        argstr = join(map(x-> sprint(io-> WebIO.showjs(io, WebIO.tojs(x))), args), ", ")
+        jss = JSString(string($(jss...)))
+        jss = "($jss)($argstr)"
+        evaljs(jso, jss)
+    end
+    return Expr(:function, Expr(:call, esc(func[1]), func[2:end]...), expr)
+end
+
+export JSObject, JSModule, scope, @jsfun
 
 end # module
