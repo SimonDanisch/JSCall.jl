@@ -251,7 +251,7 @@ using JSExpr: jsexpr
 macro jsfun(expr)
     func = copy(expr.args[1].args)
     arguments = func[2:end]
-    jss = JSExpr.jsstring(expr)
+    jss = JSCall.JSExpr.jsstring(expr)
     expr = quote
         args = ($(arguments...),)
         idx = findfirst(x-> x isa JSObject, args)
@@ -260,9 +260,12 @@ macro jsfun(expr)
         s = scope(jso)
         any(x-> x isa JSObject && (scope(x) !== s), args) && error("All JSObjects need to come from the same Scope")
         argstr = join(map(x-> sprint(io-> WebIO.showjs(io, WebIO.tojs(x))), args), ", ")
+        result = JSObject(:result, scope(jso), :object)
+        result_js = WebIO.tojs(result)
         jss = JSString(string($(jss...)))
-        jss = "($jss)($argstr)"
+        jss = "$result_js = ($jss)($argstr)"
         evaljs(jso, jss)
+        return result
     end
     return Expr(:function, Expr(:call, esc(func[1]), func[2:end]...), expr)
 end
