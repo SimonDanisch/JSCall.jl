@@ -98,18 +98,9 @@ Evaluates Javascript in the scope of JSObject
 """
 function WebIO.evaljs(
         jso::JSObject, js::Union{JSString, AbstractString};
-        try_fetch = false, try_seconds = 2
     )
     jse = tojsexpr(js)
-    task = evaljs(scope(jso), jse)
-    if try_fetch
-        start = time()
-        while (time() - start) <= try_seconds
-            if istaskdone(task)
-                return fetch(task)
-            end
-        end
-    end
+    eval_javascript!(scope(jso), jse)
     return nothing
 end
 
@@ -145,14 +136,14 @@ function Base.getproperty(jso::JSObject, field::Symbol)
         # allocate result object:
         result = JSObject(field, scope(jso), typ(jso))
         js = js"""
-        var object = $jso
-        var result = object.$(Sym(field))
-        // if result is a class method, we need to bind it to the parent object
-        if(result.bind != undefined){
-            result = result.bind(object)
-        }
-        $(object_pool_identifier)[$(uuidstr(result))] = result
-        undefined
+            var object = $jso
+            var result = object.$(Sym(field))
+            // if result is a class method, we need to bind it to the parent object
+            if(result.bind != undefined){
+                result = result.bind(object)
+            }
+            $(object_pool_identifier)[$(uuidstr(result))] = result
+            undefined
         """
         evaljs(jso, js)
         return result
@@ -202,12 +193,12 @@ function (jso::JSObject)(args...; kw_args...)
     result = JSObject(:result, scope(jso), :call)
     input_args = get_args(args, kw_args)
     js = """
-    var func = $(tojs(jso))
-    var result = $(modifier(jso))func(
-        $input_args
-    )
-    $(object_pool_identifier.symbol)[\"$(uuid(result))\"] = result
-    undefined;
+        var func = $(tojs(jso))
+        var result = $(modifier(jso))func(
+            $input_args
+        )
+        $(object_pool_identifier.symbol)[\"$(uuid(result))\"] = result
+        undefined;
     """
     evaljs(jso, js)
     return result
@@ -222,28 +213,137 @@ struct NoValue end
 
 JSON.lower(x::NoValue) = ""
 
+
+const eval_queue = Dict{UInt64, Tuple{Bool, Vector{JSString}}}()
+
+function set_batchmode!(scope::Scope, mode::Bool)
+    bm, queue = get_queue!(scope)
+    eval_queue[objectid(scope)] = (mode, queue)
+    return
+end
+function get_queue!(scope::Scope; init_batchmode = true)
+    batchmode, queue = get!(eval_queue, objectid(scope)) do
+        (init_batchmode, JSString[])
+    end
+    return batchmode, queue
+end
+"""
+    eval_queue!(scope::Scope)
+Evals all the js code that queued up, empties queue & sets batchmode to false.
+"""
+function eval_queue!(scope::Scope)
+    jss = queued_javascript!(scope)
+    return evaljs(scope, jss)
+end
+
+"""
+    fused(f, scope::Scope)
+
+Executes function `f` with batchmode of scope set to batched!
+This means, when called like:
+```Julia
+fused(scope) do
+    res = JSObject.some_func(bla)
+    res.some_val = 42
+end
+```
+The Javascript execution inside the closure will get executed fused & in one go.
+"""
+function fused(f, scope::Scope)
+    set_batchmode!(scope, true)
+    f()
+    return eval_queue!(scope)
+end
+
+"""
+    queued_javascript(scope::Scope)
+Get's one JSString containing all javascript that got queued up untill
+calling this function. Empties the queue and sets mode to not batched!
+"""
+function queued_javascript!(scope::Scope)
+    bm, queue = get_queue!(scope)
+    return JSString(sprint() do io
+        for elem in queue
+            println(io, elem)
+        end
+        empty!(queue)
+        set_batchmode!(scope, false)
+    end)
+end
+
+function enqueue_javascript!(scope::Scope, js::JSString)
+    bm, queue = get_queue!(scope)
+    push!(queue, js)
+    return scope
+end
+
+"""
+    eval_javascript(scope::Scope, js::JSString)
+Evals the javascript code `js` in `scope`. If batchmode is true,
+it will just queue the execution. If not, it will execute all js up to this point.
+"""
+function eval_javascript!(scope::Scope, js::JSString)
+    batchmode, queue = get_queue!(scope)
+    enqueue_javascript!(scope, js)
+    if !batchmode
+        evaljs(scope, queued_javascript!(scope))
+    end
+end
+
+struct JSModule
+    scope::Scope
+    mod::JSObject
+    document::JSObject
+    window::JSObject
+    display_func # A function that gets called on show with the modules Scope
+end
+queued_javascript!(jsm::JSModule) = queued_javascript!(jsm.scope)
+
+function make_renderable!(jsm::JSModule)
+    jss = queued_javascript!(jsm)
+    jss = js"""
+        function (mod){
+            $(object_pool_identifier) = {}
+            $(object_pool_identifier)[$(uuidstr(jsm.mod))] = mod
+            $(object_pool_identifier)[$(uuidstr(jsm.document))] = document
+            $(object_pool_identifier)[$(uuidstr(jsm.window))] = window
+            $(jss) // execute all queued statements in onimport
+        }
+    """
+    onimport(jsm.scope, jss)
+    return jsm.display_func(jsm.scope)
+end
+
+function Base.show(io::IO, m::MIME"text/html", jsm::JSModule)
+    Base.show(io, m, make_renderable!(jsm))
+end
+function Base.show(io::IO, m::WebIO.WEBIO_APPLICATION_MIME, jsm::JSModule)
+    Base.show(io, m, make_renderable!(jsm))
+end
+function Base.show(io::IO, m::MIME"application/prs.juno.plotpane+html", jsm::JSModule)
+    Base.show(io, m, make_renderable!(jsm))
+end
+
 """
     Module(name::Symbol, url::String)
 
 Wraps a Javascript library.
 """
 function JSModule(name::Symbol, url::String)
+    JSModule(identity, name, url)
+end
+
+function JSModule(display_func, name::Symbol, url::String)
     scope = Scope(imports = [url])
+    # insert scope into our execution queue, witch batchmode set to true
+    # Like this, all evaljs calls on this scope will get batched untill
+    # display and then executed in one go in the onimport function.
+    get_queue!(scope, init_batchmode = true)
     Observable{Any}(scope, "_jscall_value_comm", NoValue())
     mod = JSObject(name, scope, :module)
     document = JSObject(:document, scope, :module)
     window = JSObject(:window, scope, :module)
-
-    js = js"""
-    function (mod){
-        $(object_pool_identifier) = {}
-        $(object_pool_identifier)[$(uuidstr(mod))] = mod
-        $(object_pool_identifier)[$(uuidstr(document))] = document
-        $(object_pool_identifier)[$(uuidstr(window))] = window
-    }
-    """
-    onimport(scope, js)
-    return mod, document, window
+    return JSModule(scope, mod, document, window, display_func)
 end
 
 using JSExpr: jsexpr
@@ -284,7 +384,7 @@ function jlvalue(jso::JSObject)
     yield() # maybe we can already get the value on first iteration
     while time() - start < timeout
         obs[] !== NoValue() && return obs[]
-        sleep(0.001)
+        sleep(0.01)
     end
     error("Timed out while trying to fetch value")
 end
