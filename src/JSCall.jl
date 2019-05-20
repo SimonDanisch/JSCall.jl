@@ -32,13 +32,13 @@ mutable struct JSObject
     function JSObject(name::Symbol, scope::Scope, typ::Symbol)
         obj = new(name, scope, typ)
         setfield!(obj, :uuid, objectid(obj))
-        #finalizer(remove_js_reference, obj)
+        finalizer(remove_js_reference, obj)
         return obj
     end
 
     function JSObject(name::Symbol, scope::Scope, typ::Symbol, uuid::UInt64)
         obj = new(name, scope, typ, uuid)
-        #finalizer(remove_js_reference, obj)
+        finalizer(remove_js_reference, obj)
         return obj
     end
 end
@@ -53,11 +53,17 @@ end
 
 const object_pool_identifier = Sym("window.object_pool")
 
+
+
+
 """
 Removes an JSObject from the object pool!
 """
 function remove_js_reference(jso::JSObject)
-    evaljs(jso, "delete $(object_pool_identifier)[$(uuid(jso))]")
+    enqueue_javascript!(
+        scope(jso),
+        js"delete $(object_pool_identifier)[$(uuid(jso))]"
+    )
 end
 
 # define accessors
@@ -222,7 +228,11 @@ function set_batchmode!(scope::Scope, mode::Bool)
     return
 end
 function get_queue!(scope::Scope; init_batchmode = true)
-    batchmode, queue = get!(eval_queue, objectid(scope)) do
+    id = objectid(scope)
+    batchmode, queue = get!(eval_queue, id) do
+        finalizer(scope) do
+            delete!(eval_queue, id)
+        end
         (init_batchmode, JSString[])
     end
     return batchmode, queue
