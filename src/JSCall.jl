@@ -3,6 +3,7 @@ module JSCall
 using WebIO, JSExpr
 import WebIO: tojs
 using JSON
+abstract type AbstractJSObject end
 
 """
 References objects stored in Javascript.
@@ -20,7 +21,7 @@ result = jso.func(args...) # works with julia objects and other JSObjects as arg
 scene = jso.new.Scene() # same as in JS: scene = new jso.Scene()
 ```
 """
-mutable struct JSObject
+mutable struct JSObject <: AbstractJSObject
     # fields are private and not accessible via jsobject.field
     name::Symbol
     scope::Scope
@@ -43,6 +44,11 @@ mutable struct JSObject
     end
 end
 
+# define accessors
+for name in (:name, :scope, :typ, :uuid)
+    @eval $(name)(jso::JSObject) = getfield(jso, $(QuoteNode(name)))
+end
+
 """
 WebIO seems to purposefully not show symbols as variables, so we need our own Sym
 """
@@ -52,9 +58,6 @@ struct Sym
 end
 
 const object_pool_identifier = Sym("window.object_pool")
-
-
-
 
 """
 Removes an JSObject from the object pool!
@@ -66,10 +69,7 @@ function remove_js_reference(jso::JSObject)
     )
 end
 
-# define accessors
-for name in (:name, :scope, :typ, :uuid)
-    @eval $(name)(jso::JSObject) = getfield(jso, $(QuoteNode(name)))
-end
+
 
 """
     uuidstr(jso::JSObject)
@@ -225,7 +225,7 @@ const eval_queue = Dict{UInt64, Tuple{Bool, Vector{JSString}}}()
 function set_batchmode!(scope::Scope, mode::Bool)
     bm, queue = get_queue!(scope)
     eval_queue[objectid(scope)] = (mode, queue)
-    return
+    return bm
 end
 function get_queue!(scope::Scope; init_batchmode = true)
     id = objectid(scope)
@@ -260,10 +260,17 @@ end
 The Javascript execution inside the closure will get executed fused & in one go.
 """
 function fused(f, scope::Scope)
-    set_batchmode!(scope, true)
-    f()
-    return eval_queue!(scope)
+    oldmode = set_batchmode!(scope, true)
+    result = f()
+    set_batchmode!(scope, oldmode)
+    if !oldmode
+        evaljs(scope, queued_javascript!(scope))
+    end
+    return result
 end
+
+fused(f, jsm::AbstractJSObject) = fused(f, scope(jsm))
+
 
 """
     queued_javascript(scope::Scope)
@@ -300,14 +307,17 @@ function eval_javascript!(scope::Scope, js::JSString)
     end
 end
 
-struct JSModule
+queued_javascript!(jsm::AbstractJSObject) = queued_javascript!(scope(jsm))
+
+
+struct JSModule <: AbstractJSObject
     scope::Scope
     mod::JSObject
     document::JSObject
     window::JSObject
     display_func # A function that gets called on show with the modules Scope
 end
-queued_javascript!(jsm::JSModule) = queued_javascript!(jsm.scope)
+scope(x::JSModule) = getfield(x, :scope)
 
 function make_renderable!(jsm::JSModule)
     jss = queued_javascript!(jsm)
