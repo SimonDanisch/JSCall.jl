@@ -1,8 +1,5 @@
 module JSCall
 
-using WebIO, JSExpr
-import WebIO: tojs
-using JSON
 abstract type AbstractJSObject end
 
 """
@@ -24,20 +21,20 @@ scene = jso.new.Scene() # same as in JS: scene = new jso.Scene()
 mutable struct JSObject <: AbstractJSObject
     # fields are private and not accessible via jsobject.field
     name::Symbol
-    scope::Scope
+    scope::Session
     typ::Symbol
     # transporting the UUID allows us to have a uuid different from the objectid
     # which will help to better capture === equivalence on the js side.
     uuid::UInt64
 
-    function JSObject(name::Symbol, scope::Scope, typ::Symbol)
+    function JSObject(name::Symbol, scope::Session, typ::Symbol)
         obj = new(name, scope, typ)
         setfield!(obj, :uuid, objectid(obj))
         finalizer(remove_js_reference, obj)
         return obj
     end
 
-    function JSObject(name::Symbol, scope::Scope, typ::Symbol, uuid::UInt64)
+    function JSObject(name::Symbol, scope::Session, typ::Symbol, uuid::UInt64)
         obj = new(name, scope, typ, uuid)
         finalizer(remove_js_reference, obj)
         return obj
@@ -222,12 +219,12 @@ JSON.lower(x::NoValue) = ""
 
 const eval_queue = Dict{UInt64, Tuple{Bool, Vector{JSString}}}()
 
-function set_batchmode!(scope::Scope, mode::Bool)
+function set_batchmode!(scope::Session, mode::Bool)
     bm, queue = get_queue!(scope)
     eval_queue[objectid(scope)] = (mode, queue)
     return bm
 end
-function get_queue!(scope::Scope; init_batchmode = true)
+function get_queue!(scope::Session; init_batchmode = true)
     id = objectid(scope)
     batchmode, queue = get!(eval_queue, id) do
         finalizer(scope) do
@@ -238,16 +235,16 @@ function get_queue!(scope::Scope; init_batchmode = true)
     return batchmode, queue
 end
 """
-    eval_queue!(scope::Scope)
+    eval_queue!(scope::Session)
 Evals all the js code that queued up, empties queue & sets batchmode to false.
 """
-function eval_queue!(scope::Scope)
+function eval_queue!(scope::Session)
     jss = queued_javascript!(scope)
     return evaljs(scope, jss)
 end
 
 """
-    fused(f, scope::Scope)
+    fused(f, scope::Session)
 
 Executes function `f` with batchmode of scope set to batched!
 This means, when called like:
@@ -259,7 +256,7 @@ end
 ```
 The Javascript execution inside the closure will get executed fused & in one go.
 """
-function fused(f, scope::Scope)
+function fused(f, scope::Session)
     oldmode = set_batchmode!(scope, true)
     result = f()
     set_batchmode!(scope, oldmode)
@@ -273,11 +270,11 @@ fused(f, jsm::AbstractJSObject) = fused(f, scope(jsm))
 
 
 """
-    queued_javascript(scope::Scope)
+    queued_javascript(scope::Session)
 Get's one JSString containing all javascript that got queued up untill
 calling this function. Empties the queue and sets mode to not batched!
 """
-function queued_javascript!(scope::Scope)
+function queued_javascript!(scope::Session)
     bm, queue = get_queue!(scope)
     return JSString(sprint() do io
         for elem in queue
@@ -288,18 +285,18 @@ function queued_javascript!(scope::Scope)
     end)
 end
 
-function enqueue_javascript!(scope::Scope, js::JSString)
+function enqueue_javascript!(scope::Session, js::JSString)
     bm, queue = get_queue!(scope)
     push!(queue, js)
     return scope
 end
 
 """
-    eval_javascript(scope::Scope, js::JSString)
+    eval_javascript(scope::Session, js::JSString)
 Evals the javascript code `js` in `scope`. If batchmode is true,
 it will just queue the execution. If not, it will execute all js up to this point.
 """
-function eval_javascript!(scope::Scope, js::JSString)
+function eval_javascript!(scope::Session, js::JSString)
     batchmode, queue = get_queue!(scope)
     enqueue_javascript!(scope, js)
     if !batchmode
@@ -311,11 +308,11 @@ queued_javascript!(jsm::AbstractJSObject) = queued_javascript!(scope(jsm))
 
 
 struct JSModule <: AbstractJSObject
-    scope::Scope
+    scope::Session
     mod::JSObject
     document::JSObject
     window::JSObject
-    display_func # A function that gets called on show with the modules Scope
+    display_func # A function that gets called on show with the modules Session
 end
 scope(x::JSModule) = getfield(x, :scope)
 
@@ -354,7 +351,7 @@ function JSModule(name::Symbol, url::String)
 end
 
 function JSModule(display_func, name::Symbol, url::String)
-    scope = Scope(imports = [url])
+    scope = Session(imports = [url])
     # insert scope into our execution queue, witch batchmode set to true
     # Like this, all evaljs calls on this scope will get batched untill
     # display and then executed in one go in the onimport function.
@@ -378,7 +375,7 @@ macro jsfun(expr)
         idx === nothing && error("At least one argument needs to be of type JSObject")
         jso = args[idx]
         s = scope(jso)
-        any(x-> x isa JSObject && (scope(x) !== s), args) && error("All JSObjects need to come from the same Scope")
+        any(x-> x isa JSObject && (scope(x) !== s), args) && error("All JSObjects need to come from the same Session")
         argstr = join(map(x-> sprint(io-> WebIO.showjs(io, WebIO.tojs(x))), args), ", ")
         result = JSObject(:result, scope(jso), :object)
         result_js = WebIO.tojs(result)
