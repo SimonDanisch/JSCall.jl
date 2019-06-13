@@ -7,8 +7,8 @@ using Hyperscript
 using Observables
 x = Observable(1)
 
-@tags div script
-@tags_noescape style
+@tags div
+@tags_noescape style script
 
 struct Session
     connection::WebSocket
@@ -25,6 +25,8 @@ struct Application
     websocket_url::String
     server::Ref{ServerWS}
     server_task::Ref{Task}
+    http_handler::Ref{Function}
+    ws_handler::Ref{Function}
     dom::Ref{Any}
 end
 
@@ -34,6 +36,7 @@ function handler(application, request)
     # return serve_assets(request)
     return sprint(io-> show(io, MIME"text/html"(), application.dom[]))
 end
+
 function wshandler(application, request, websocket)
     if request.target == application.websocket_route
         session = Session(websocket)
@@ -61,7 +64,6 @@ end
 
 function Application(
         url::String, port::Int;
-        routing = handler,
         dependencies = String[],
         websocket_route = "/webio_websocket/",
         websocket_url = string("ws://", url, ":", port, websocket_route),
@@ -72,13 +74,15 @@ function Application(
     my_app = div(websocket_script, dom)
     application = Application(
         url, port, dependencies, Session[], websocket_route, websocket_url,
-        Ref{ServerWS}(), Ref{Task}(), Ref{Any}(my_app),
+        Ref{ServerWS}(), Ref{Task}(),
+        Ref{Function}(handler), Ref{Function}(wshandler),
+        Ref{Any}(my_app),
     )
     function inner_handler(request)
-        handler(application, request)
+        application.http_handler[](application, request)
     end
     function inner_wshandler(request, websocket)
-        wshandler(application, request, websocket)
+        application.ws_handler[](application, request, websocket)
     end
 
     application.server[] = WebSockets.ServerWS(inner_handler, inner_wshandler)
@@ -101,8 +105,6 @@ app = Application(
     dom = "hi"
 )
 
-
-
 send(app.sessions[1], type = "eval", payload = "console.log('hi')")
 obs = Observable(1)
 register_obs!(app.sessions[1], obs)
@@ -111,7 +113,34 @@ send(app.sessions[1], type = "eval", payload = "console.log(get_observable($(rep
 
 send(app.sessions[1], type = "eval", payload = "update_obs($(repr(obs.id)), 232)")
 obs[]
-
 # open browser, go to http://127.0.0.1:8081/
 # then after everything connected, talk:
 # write(app.sessions[1].connection, "console.log('boi')")
+const obs_used_in_js = Dict{String, Observable}()
+
+function js_obs_get!(obs::Observable)
+    obs_used_in_js[obs.id] = obs
+    return string("get_observable(", repr(obs.id), ")")
+end
+
+function js_obs_get!(any)
+    return JSON.json(any)
+end
+
+macro js_str(js_source)
+    escape_regex = r"\$\(([\u00A0-\uFFFF\w_!´\.]*@?[\u00A0-\uFFFF\w_!´]+)\)|\$([\u00A0-\uFFFF\w_!´\.]*@?[\u00A0-\uFFFF\w_!´]+)"
+    esc_symbols = map(eachmatch(escape_regex, js_source)) do x
+        x[1] !== nothing ? x[1] : x[2] # find the match that matched
+    end
+    non_esc = split(js_source, escape_regex)
+    @show esc_symbols non_esc
+    result = :(string($(non_esc[1])))
+    for i in 2:length(non_esc)
+        push!(result.args, :(js_obs_get!($(esc(Symbol(esc_symbols[i-1]))))))
+        push!(result.args, non_esc[i])
+    end
+    result
+end
+
+
+send(app.sessions[1], type = "eval", payload = js"console.log($obs)")
