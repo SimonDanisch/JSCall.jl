@@ -1,37 +1,29 @@
-using JSCall, WebIO, JSExpr
-using Test
-using JSExpr: jsexpr
-using JSCall
-using WebIO
-THREE, document = JSModule(
-    :THREE,
-    "https://cdnjs.cloudflare.com/ajax/libs/three.js/103/three.js",
+using JSCall, Hyperscript, Observables
+using JSCall: Application, Session, evaljs, Widget, linkjs, update_dom!, div, active_sessions
+using JSCall: @js_str, font
+
+
+app = Application(
+    "127.0.0.1", 8081,
+    verbose = true,
+    dom = "hi"
 )
 
-scene = THREE.new.Scene()
-width, height = 500, 500
-# Create a basic perspective camera
-camera = THREE.new.PerspectiveCamera(75, width / height, 0.1, 1000)
-camera.position.z = 4
-renderer = THREE.new.WebGLRenderer(Dict(:antialias => true))
-renderer.setClearColor("#ffffff")
-geometry = THREE.new.BoxGeometry(1, 1, 1)
-material = THREE.new.MeshBasicMaterial(color = "#433F81")
-cube = THREE.new.Mesh(geometry, material);
-scene.add(cube)
-container = document.querySelector("#container")
-container.appendChild(renderer.domElement)
-display((scope(THREE))(dom"div#container"()))
+id, session = last(active_sessions(app))
+# open browser, go to http://127.0.0.1:8081/
 
-@jsfun function render(unused)
-    @var cube = $cube
-    @var renderer = $renderer
-    @var scene = $scene
-    @var camera = $camera
-    cube.rotation.x += 0.01
-    cube.rotation.y += 0.01
-    renderer.render(scene, camera)
-    requestAnimationFrame(render)
-end
+# Test if connection is working:
+evaljs(session, js"alert('hi')")
+# display a widget
+w1 = Widget(1:100)
+w2 = Widget(1:100)
+linkjs(session, w1.value, w2.value)
+update_dom!(session, div(w1, w1.value, w2, w2.value))
 
-render(scene)
+# you can now also update attributes dynamically inplace
+w1.range[] = 10:20
+
+# Or insert observables as attributes and change them dynamically
+color = Observable("red")
+update_dom!(session, font(color = color, "spicy"))
+color[] = "green"

@@ -229,3 +229,9 @@ function Application(
     application.server_task[] = @async WebSockets.serve(application.server[], url, port, verbose)
     return application
 end
+
+function active_sessions(app::Application)
+    collect(filter(app.sessions) do (k, v)
+        isopen(v) # leave not yet started connections
+    end)
+end
