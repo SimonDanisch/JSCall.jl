@@ -143,6 +143,20 @@ function onjs(session::Session, obs::Observable, func::JSString)
     )
 end
 
+function linkjs(session::Session, a::Observable, b::Observable)
+    # register the callback with the JS session
+    onjs(
+        session,
+        a,
+        js"""
+        function (value){
+            console.log("linking: " + value)
+            update_obs($b, value)
+        }
+        """
+    )
+end
+
 
 function evaljs(session::Session, jss::JSString)
     add_observables!(session, jss)

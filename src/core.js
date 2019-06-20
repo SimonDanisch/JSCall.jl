@@ -16,13 +16,11 @@ function get_observable(id){
 }
 
 function update_obs(id, value){
-    console.log(id + " " + value);
     observables[id] = value
     // call onjs callbacks
     if(id in observable_callbacks){
         var callbacks = observable_callbacks[id]
         for (var i = 0; i < callbacks.length; i++) {
-            console.log("updating inside onjs: " + value)
             callbacks[i](value)
         }
     }
@@ -51,7 +49,6 @@ function setup_connection(){
                         if(data.id in observable_callbacks){
                             var callbacks = observable_callbacks[data.id]
                             for (var i = 0; i < callbacks.length; i++) {
-                                console.log("updating onjs: " + value)
                                 callbacks[i](value)
                             }
                         }
@@ -59,8 +56,11 @@ function setup_connection(){
                     case OnjsCallback:
                         // register a callback that will executed on js side
                         // when observable updates
+                        var id = data.id
                         var f = eval(data.payload);
-                        observable_callbacks[data.id] = [f];
+                        var callbacks = observable_callbacks[id] || []
+                        callbacks.push(f)
+                        observable_callbacks[id] = callbacks
                         break;
                     case EvalJavascript:
                         console.log(data.payload)

@@ -48,4 +48,7 @@ append_source!(x::JSSource, value::JSSource) = push!(x.source, value)
 append_source!(x::JSSource, value::JSSource) = append!(x.source, value.source)
 
 # Allow to pass JSSource's to a Hyperscript.Node as an attribute
-Base.show(io::Hyperscript.EscapeIO, jss::JSString) = print(io.io, tojsstring(jss))
+
+function Hyperscript.printescaped(io::IO, jss::JSString, etag)
+    print(io, tojsstring(jss))
+end

@@ -60,15 +60,41 @@ function jsrender(session::Session, obs::Observable)
     return div(id = obs.id, string(obs[]))
 end
 
+# default turn attributes into strings
+attribute_render(session, parent_id, attribute, x) = string(x)
+function attribute_render(session, parent_id, attribute, obs::Observable)
+    println("Registering $(obs.id) with attributes")
+    onjs(session, obs, js"""
+    function (value){
+        var node = document.querySelector('[data-jscall-id=$parent_id]')
+        node[$attribute] = value
+    }
+    """)
+    return attribute_render(session, parent_id, attribute, obs[])
+end
+
+function attribute_render(session, parent_id, attribute, jss::JSString)
+    add_observables!(session, jss)
+    return tojsstring(jss)
+end
+
+
 function jsrender(session::Session, node::Hyperscript.Node)
     newchildren = map(Hyperscript.children(node)) do elem
         jsrender(session, elem)
     end
+    node_id = string(uuid4())
+    node_attributes = Hyperscript.attrs(node)
+    @show typeof(node_attributes)
+    new_attributes = Dict{String, Any}(map(collect(keys(node_attributes))) do k
+        k => attribute_render(session, node_id, k, node_attributes[k])
+    end)
+    new_attributes["data-jscall-id"] = node_id
     return Hyperscript.Node(
         Hyperscript.context(node),
         Hyperscript.tag(node),
         newchildren,
-        Hyperscript.attrs(node)
+        new_attributes
     )
 end
 
@@ -100,13 +126,14 @@ app = Application(
 )
 
 id, session = last(collect(filter(app.sessions) do (k, v)
-    isassigned(v.connection) && isopen(v.connection[]) # leave not yet started connections
-     # filter out closed
+    isopen(v) # leave not yet started connections
 end))
 # open browser, go to http://127.0.0.1:8081/
 
 # Test if connection is working:
 evaljs(session, js"alert('hi')")
 # display a widget
-w = Widget(1:10)
-update_dom!(session, div(w, w.value))
+w1 = Widget(1:100)
+w2 = Widget(1:100)
+linkjs(session, w1.value, w2.value)
+update_dom!(session, div(w1, w1.value, w2, w2.value))

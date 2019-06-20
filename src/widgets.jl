@@ -17,14 +17,14 @@ function Widget(range::T, value = first(range)) where T <: AbstractRange
     )
 end
 
-function jsrender(w::Widget)
-    return input(
+function jsrender(session::Session, w::Widget)
+    return jsrender(session, input(
         type = "range",
         min = string(first(w.range[])),
         max = string(last(w.range[])),
-        value = string(w.value[]),
+        value = w.value,
         step = string(step(w.range[])),
         class = "slider", id = uuid(w),
         oninput = js"update_obs($(w.value), parseInt(value))"
-    )
+    ))
 end
