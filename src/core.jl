@@ -4,7 +4,7 @@ using WebSockets, UUIDs, Hyperscript, Hyperscript, JSON, Observables
 using WebSockets: is_upgrade, upgrade, writeguarded
 using WebSockets: HTTP, ServerWS
 
-@tags div input
+@tags div input font
 @tags_noescape style script
 
 include("js_source.jl")
@@ -63,11 +63,12 @@ end
 # default turn attributes into strings
 attribute_render(session, parent_id, attribute, x) = string(x)
 function attribute_render(session, parent_id, attribute, obs::Observable)
-    println("Registering $(obs.id) with attributes")
     onjs(session, obs, js"""
     function (value){
         var node = document.querySelector('[data-jscall-id=$parent_id]')
-        node[$attribute] = value
+        if(node[$attribute] != value){
+            node[$attribute] = value
+        }
     }
     """)
     return attribute_render(session, parent_id, attribute, obs[])
@@ -85,7 +86,6 @@ function jsrender(session::Session, node::Hyperscript.Node)
     end
     node_id = string(uuid4())
     node_attributes = Hyperscript.attrs(node)
-    @show typeof(node_attributes)
     new_attributes = Dict{String, Any}(map(collect(keys(node_attributes))) do k
         k => attribute_render(session, node_id, k, node_attributes[k])
     end)
@@ -137,3 +137,11 @@ w1 = Widget(1:100)
 w2 = Widget(1:100)
 linkjs(session, w1.value, w2.value)
 update_dom!(session, div(w1, w1.value, w2, w2.value))
+
+# you can now also update attributes dynamically inplace
+w1.range[] = 10:20
+
+# Or insert observables as attributes and change them dynamically
+color = Observable("red")
+update_dom!(session, font(color = color, "spicy"))
+color[] = "green"

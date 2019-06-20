@@ -20,10 +20,10 @@ end
 function jsrender(session::Session, w::Widget)
     return jsrender(session, input(
         type = "range",
-        min = string(first(w.range[])),
-        max = string(last(w.range[])),
+        min = map(first, w.range),
+        max = map(last, w.range),
         value = w.value,
-        step = string(step(w.range[])),
+        step = map(step, w.range),
         class = "slider", id = uuid(w),
         oninput = js"update_obs($(w.value), parseInt(value))"
     ))
