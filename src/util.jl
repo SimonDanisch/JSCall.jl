@@ -38,7 +38,7 @@ function add_observables!(session::Session, x::Observable, visited = IdDict())
         register_obs!(session, x)
     else
         # only add to session. Will register with fronted on websocket connect!
-        session.observables[x.id] = x
+        session.observables[x.id] = (false, x)
     end
 end
 

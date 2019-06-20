@@ -7,8 +7,13 @@ function attribute_render(session, parent_id, attribute, obs::Observable)
     onjs(session, obs, js"""
     function (value){
         var node = document.querySelector('[data-jscall-id=$parent_id]')
-        if(node[$attribute] != value){
-            node[$attribute] = value
+        if(node){
+            if(node[$attribute] != value){
+                node[$attribute] = value
+            }
+            return true
+        }else{
+            return false //deregister
         }
     }
     """)

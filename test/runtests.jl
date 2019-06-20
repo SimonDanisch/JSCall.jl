@@ -11,9 +11,9 @@ app = Application(
 
 id, session = last(active_sessions(app))
 # open browser, go to http://127.0.0.1:8081/
-
+session.observables
 # Test if connection is working:
-evaljs(session, js"alert('hi')")
+# evaljs(session, js"alert('hi')")
 # display a widget
 w1 = Widget(1:100)
 w2 = Widget(1:100)

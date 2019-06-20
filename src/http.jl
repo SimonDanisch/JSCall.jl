@@ -2,15 +2,17 @@
 const UpdateObservable = "0"
 const OnjsCallback = "1"
 const EvalJavascript = "2"
+const JavascriptError = "3"
+const JavascriptWarning = "4"
 
 """
 A web session with a user
 """
 struct Session
     connection::Ref{WebSocket}
-    observables::Dict{String, Observable}
+    observables::Dict{String, Tuple{Bool, Observable}} # Bool -> if already registered with Frontend
 end
-Session(connection) = Session(connection, Dict{String, Observable}())
+Session(connection) = Session(connection, Dict{String, Tuple{Bool, Observable}}())
 
 """
 Send values to the frontend via JSON for now
@@ -66,14 +68,19 @@ so that it updates the values on the JS side accordingly,
 and in turn can be updated from JS
 """
 function register_obs!(session::Session, obs::Observable)
-    # Register on the JS side by sending the current value
-    send(session, type = UpdateObservable, id = obs.id, payload = obs[])
-    updater = JSUpdateObservable(session, obs.id)
-    # Make sure we update the Javascript values!
-    # TODO, don't register when obs already has a callback with this session
-    on(updater, obs)
-    # register with session.
-    session.observables[obs.id] = obs
+    registered = false
+    if haskey(session.observables, obs.id)
+        registered, _  = session.observables[obs.id]
+    else
+        session.observables[obs.id] = (true, obs)
+    end
+    if !registered
+        # Register on the JS side by sending the current value
+        send(session, type = UpdateObservable, id = obs.id, payload = obs[])
+        updater = JSUpdateObservable(session, obs.id)
+        # Make sure we update the Javascript values!
+        on(updater, obs)
+    end
     return
 end
 
@@ -108,10 +115,12 @@ function websocket_handler(application, request, websocket)
                     data = JSON.parse(json)
                     typ = data["type"]
                     if data["type"] == UpdateObservable
-                        obs = session.observables[data["id"]]
+                        reg, obs = session.observables[data["id"]]
                         # Make sure we don't notify our JS updater, since
                         # otherwise we would get into a an endless cycle
                         Base.invokelatest(update_nocycle!, obs, data["payload"])
+                    elseif data["type"] == JavascriptError
+                        @error "Error in Javascript: $(data["message"])\n with exception:\n$(data["exception"])"
                     else
                         @error "Unrecognized message: $(typ) with type: $(typeof(type))"
                     end
@@ -150,8 +159,9 @@ function linkjs(session::Session, a::Observable, b::Observable)
         a,
         js"""
         function (value){
-            console.log("linking: " + value)
-            update_obs($b, value)
+            // update_obs will return false once b is gone,
+            // so this will automatically deregister the link!
+            return update_obs($b, value)
         }
         """
     )

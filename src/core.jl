@@ -41,7 +41,12 @@ function jsrender(session::Session, obs::Observable)
     onjs(session, obs, js"""
         function (html){
             var dom = document.getElementById($(obs.id))
-            dom.innerHTML = html
+            if(dom){
+                dom.innerHTML = html
+                return true
+            }else{
+                return false
+            }
         }
     """)
     return div(id = obs.id, string(obs[]))
@@ -50,8 +55,8 @@ end
 function update_dom!(session::Session, dom)
     dom = jsrender(session, dom)
     add_observables!(session, dom)
-    for (n, obs) in session.observables
-        register_obs!(session, obs)
+    for (n, (reg, obs)) in session.observables
+        reg || register_obs!(session, obs)
     end
     innerhtml = repr(MIME"text/html"(), dom)
     update_script = js"""
