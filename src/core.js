@@ -19,16 +19,16 @@ function get_observable(id){
 }
 
 function send_error(message, exception){
-    websocket.send({
+    websocket_send({
         type: JavascriptError,
         message: message,
-        exception: exception
+        exception: String(exception)
     })
 }
 
 
 function send_warning(message){
-    websocket.send({
+    websocket_send({
         type: JavascriptWarning,
         payload: message
     })
@@ -46,7 +46,12 @@ function run_js_callbacks(id, value){
                     deregister_calls.push(i)
                 }
             }catch(exception){
-                 send_error("Error during running onjs callback", exception)
+                 send_error(
+                    "Error during running onjs callback\n" +
+                    "Callback:\n" +
+                    callbacks[i].toString(),
+                    exception
+                )
             }
         }
         for (var i = 0; i < deregister_calls.length; i++) {
@@ -59,7 +64,6 @@ function run_js_callbacks(id, value){
 
 
 function update_obs(id, value){
-    console.log("js update obs " + id)
     if(id in observables){
         try{
             observables[id] = value
@@ -72,7 +76,10 @@ function update_obs(id, value){
                 payload: value
             })
         }catch(exception){
-             send_error("Error during update_obs", exception)
+            send_error(
+                "Error during update_obs with observable " + id,
+                exception
+            )
         }
         return true
     }else{
@@ -96,13 +103,16 @@ function setup_connection(){
                 switch(data.type) {
                     case UpdateObservable:
                         try{
-                            console.log("jl update obs " + data.id)
                             var value = data.payload
                             observables[data.id] = value
                             // update all onjs callbacks
                             run_js_callbacks(data.id, value)
                         }catch(exception){
-                            send_error("Error while running an observable update from Julia", exception)
+                            send_error(
+                                "Error while updating observable " + data.id +
+                                " from Julia!",
+                                exception
+                            )
                         }
                         break;
                     case OnjsCallback:
@@ -115,18 +125,30 @@ function setup_connection(){
                             callbacks.push(f)
                             observable_callbacks[id] = callbacks
                         }catch(exception){
-                            send_error("Error while registering an onjs callback", exception)
+                            send_error(
+                                "Error while registering an onjs callback.\n" +
+                                "onjs function source:\n" +
+                                data.payload,
+                                exception
+                            )
                         }
                         break;
                     case EvalJavascript:
                         try{
                             eval(data.payload);
                         }catch(exception){
-                            send_error("Error while evaling JS from Julia", exception)
+                            send_error(
+                                "Error while evaling JS from Julia. Source:\n" +
+                                data.payload,
+                                exception
+                            )
                         }
                         break;
                     default:
-                        send_error("Unrecognized message type: " + data.id, "")
+                        send_error(
+                            "Unrecognized message type: " + data.id + ".",
+                            ""
+                        )
                 }
             }
         }
