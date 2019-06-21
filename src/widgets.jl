@@ -28,3 +28,24 @@ function jsrender(session::Session, w::Widget)
         oninput = js"update_obs($(w.value), parseInt(value))"
     ))
 end
+
+
+struct Button{T}
+    id::String
+    content::Observable{T}
+    onclick::Observable{Bool}
+    attributes::Dict{Symbol, Any}
+end
+Button(content) = Button(
+    string(uuid4()), Observable(content), Observable(false), Dict{Symbol, Any}()
+)
+
+function jsrender(session::Session, w::Button)
+    return jsrender(session, input(
+        type = "button",
+        value = w.content,
+        id = w.id,
+        onclick = js"update_obs($(w.onclick), true)";
+        w.attributes...
+    ))
+end
