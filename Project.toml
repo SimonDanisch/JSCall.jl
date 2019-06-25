@@ -4,8 +4,10 @@ authors = ["SimonDanisch <sdanisch@gmail.com>"]
 version = "0.1.0"
 
 [deps]
+AssetRegistry = "bf4720bc-e11a-5d0c-854e-bdca1663c893"
 JSExpr = "97c1335a-c9c5-57fe-bc5d-ec35cebe8660"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+Sockets = "6462fe0b-24de-5631-8697-dd941f90decc"
 WebIO = "0f1e0344-ec1d-5b48-a673-e5cf874b6c29"
 
 [extras]

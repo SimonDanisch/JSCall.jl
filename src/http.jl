@@ -1,3 +1,16 @@
+using WebSockets: check_upgrade, WebSocket, is_upgrade, generate_websocket_key
+import HTTP:Response,   # For upgrade
+            Request,    # For upgrade, target, origin, subprotocol
+            Header,     # benchmarks, client_test, handshaketest
+            header,     # For upgrade, subprotocol
+            hasheader,  # For upgrade and check_upggrade
+            setheader,  # For upgrade
+            setstatus,  # For upgrade
+            startwrite, # For upgrade
+            startread  # For _openstream
+import HTTP.ConnectionPool: getrawstream                    # For _openstream
+import HTTP.Streams: Stream                          # For is_upgrade, handshaketest
+using Base64
 # Save some bytes by using ints for switch variable
 const UpdateObservable = "0"
 const OnjsCallback = "1"
@@ -28,12 +41,12 @@ struct Application
     dependencies::Vector{String}
     sessions::Dict{String, Session}
     websocket_url::String
-    server::Ref{ServerWS}
     server_task::Ref{Task}
-    http_handler::Ref{Function}
-    ws_handler::Ref{Function}
     dom::Ref{Any}
 end
+
+include("websockets.jl")
+
 
 """
 Functor to update JS part when an observable changes.
@@ -84,9 +97,56 @@ function register_obs!(session::Session, obs::Observable)
     return
 end
 
+function stream_handler(application::Application, stream::Stream)
+    try
+        if is_upgrade(stream.message)
+            upgrade_websocket(application, stream)
+        else
+            f = HTTP.Handlers.RequestHandlerFunction() do req
+                http_handler(application, req)
+            end
+            HTTP.handle(f, stream)
+        end
+    catch err
+        @error "error in upgrade" exception=err
+    end
+end
+
+
+function http_handler(application::Application, request::Request)
+    try
+        sessionid = string(uuid4())
+        session = Session(Ref{WebSocket}())
+        application.sessions[sessionid] = session
+        return string(
+            """
+            <!doctype html>
+            <html>
+            <head>
+            <meta charset="UTF-8">
+            """,
+            "<script>\n",
+            js_source(application.websocket_url, sessionid),
+            "</script>\n",
+            """
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            </head>
+            <body>
+            """,
+            "<div id='application-dom'>\n",
+            repr(MIME"text/html"(), jsrender(session, application.dom[])),
+            "\n</div>\n",
+            "<script>setup_connection()</script>\n",
+            "</body>\n</html>\n"
+        )
+    catch e
+        @warn "error in handler" exception=e
+        return "error :(\n$e"
+    end
+end
+
 
 function websocket_handler(application, request, websocket)
-    @show websocket # Lol somehow it's a lot buggier without this show -.-
     if length(request.target) > 2 # for /id/
         sessionid = request.target[2:end-1] # remove the '/' id '/'
         # Look up the connection in our sessions
@@ -125,7 +185,11 @@ function websocket_handler(application, request, websocket)
                         @error "Unrecognized message: $(typ) with type: $(typeof(type))"
                     end
                 catch e
-                    @error "Websocket error:" exception = e
+                    if e isa WebSockets.WebSocketClosedError
+                        delete!(application.sessions, sessionid)
+                    else
+                        @error "Websocket error:" exception = e
+                    end
                 end
             end
         end
@@ -133,6 +197,32 @@ function websocket_handler(application, request, websocket)
     @warn "Unrecognized Websocket route: $(request.target)"
 end
 
+
+function Application(
+        url::String, port::Int;
+        dependencies = String[],
+        websocket_url = string("ws://", url, ":", port),
+        verbose = false,
+        dom = nothing
+    )
+    application = Application(
+        url, port, dependencies, Dict{String, Session}(), websocket_url,
+        Ref{Task}(), Ref{Any}(dom),
+    )
+    application.server_task[] = @async HTTP.listen(url, port, verbose = verbose) do stream::Stream
+        Base.invokelatest(stream_handler, application, stream)
+    end
+    return application
+end
+
+
+"""
+    onjs(session::Session, obs::Observable, func::JSString)
+
+Register a javascript function with `session`, that get's called when `obs` gets a new value.
+If the observable gets updated from the JS side, the calling of `func` will be triggered
+entirely in javascript, without any communication with the Julia `session`.
+"""
 function onjs(session::Session, obs::Observable, func::JSString)
     # register the callback with the JS session
     register_obs!(session, obs)
@@ -152,6 +242,12 @@ function onjs(session::Session, obs::Observable, func::JSString)
     )
 end
 
+"""
+    linkjs(session::Session, a::Observable, b::Observable)
+
+for an open session, link a and b on the javascript side. This will also
+Link the observables in Julia, but only as long as the session is active.
+"""
 function linkjs(session::Session, a::Observable, b::Observable)
     # register the callback with the JS session
     onjs(
@@ -167,7 +263,11 @@ function linkjs(session::Session, a::Observable, b::Observable)
     )
 end
 
+"""
+    evaljs(session::Session, jss::JSString)
 
+Evaluate a javascript script in `session`.
+"""
 function evaljs(session::Session, jss::JSString)
     add_observables!(session, jss)
     jssss = tojsstring(jss)
@@ -178,66 +278,8 @@ function js_source(websocket_url, sessionid)
     src = read(joinpath(@__DIR__, "core.js"), String)
     return replace(
         src,
-        "__websock_url__" => repr(string(websocket_url, "/", sessionid, "/"))
+        "__session_id__" => repr(sessionid)
     )
-end
-
-function handler(application, request)
-    try
-        sessionid = string(uuid4())
-        session = Session(Ref{WebSocket}())
-        application.sessions[sessionid] = session
-        return string(
-            """
-            <!doctype html>
-            <html>
-            <head>
-            <meta charset="UTF-8">
-            """,
-            "<script>\n",
-            js_source(application.websocket_url, sessionid),
-            "</script>\n",
-            """
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            </head>
-            <body>
-            """,
-            "<div id='application-dom'>\n",
-            repr(MIME"text/html"(), jsrender(session, application.dom[])),
-            "\n</div>\n",
-            "<script>setup_connection()</script>\n",
-            "</body>\n</html>\n"
-        )
-    catch e
-        @warn "error in handler" exception=e
-        return "error :(\n$e"
-    end
-end
-
-function Application(
-        url::String, port::Int;
-        dependencies = String[],
-        websocket_url = string("ws://", url, ":", port),
-        verbose = false,
-        dom = nothing
-    )
-    application = Application(
-        url, port, dependencies, Dict{String, Session}(), websocket_url,
-        Ref{ServerWS}(), Ref{Task}(),
-        Ref{Function}(handler), Ref{Function}(websocket_handler),
-        Ref{Any}(dom),
-    )
-
-    function inner_handler(request)
-        Base.invokelatest(application.http_handler[], application, request)
-    end
-    function inner_wshandler(request, websocket)
-        Base.invokelatest(application.ws_handler[], application, request, websocket)
-    end
-
-    application.server[] = WebSockets.ServerWS(inner_handler, inner_wshandler)
-    application.server_task[] = @async WebSockets.serve(application.server[], url, port, verbose)
-    return application
 end
 
 function active_sessions(app::Application)

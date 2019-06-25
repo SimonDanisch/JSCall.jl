@@ -32,24 +32,31 @@ To enable putting YourType into a dom element/div.
 You can also overload it to take a session as first argument, to register
 messages with the current web session (e.g. via onjs).
 """
-jsrender(x::Any) = div(repr(richest_mime(x), x))
-# jsrender(session, x) will be called anywhere...
-# if there is nothing sessions specific in the dom, fallback to jsrender without session
 jsrender(::Session, x::Any) = jsrender(x)
 
+jsrender(::Session, x::String) = x
+jsrender(::Session, x::Hyperscript.Styled) = x
+
+# jsrender(session, x) will be called anywhere...
+# if there is nothing sessions specific in the dom, fallback to jsrender without session
 function jsrender(session::Session, obs::Observable)
-    onjs(session, obs, js"""
+    html = map(obs) do value
+        dom = jsrender(session, value)
+        repr(MIME"text/html"(), dom)
+    end
+    onjs(session, html, js"""
         function (html){
             var dom = document.getElementById($(obs.id))
             if(dom){
                 dom.innerHTML = html
                 return true
             }else{
+                //deregister the callback if the obs dom is gone
                 return false
             }
         }
     """)
-    return div(id = obs.id, string(obs[]))
+    return div(html[], id = obs.id)
 end
 
 function update_dom!(session::Session, dom)

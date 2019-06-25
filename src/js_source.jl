@@ -34,21 +34,12 @@ function iterate_interpolations(source::String)
     end
     return result
 end
-
 macro js_str(js_source)
     value_array = :([])
     append!(value_array.args, iterate_interpolations(js_source))
     return :(JSString($value_array))
 end
 
-
-
 append_source!(x::JSSource, value::String) = push!(x.source, JSSource(value))
-append_source!(x::JSSource, value::JSSource) = push!(x.source, value)
+append_source!(x::JSSource, value::JSString) = push!(x.source, value)
 append_source!(x::JSSource, value::JSSource) = append!(x.source, value.source)
-
-# Allow to pass JSSource's to a Hyperscript.Node as an attribute
-
-function Hyperscript.printescaped(io::IO, jss::JSString, etag)
-    print(io, tojsstring(jss))
-end

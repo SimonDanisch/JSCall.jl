@@ -25,29 +25,35 @@ function attribute_render(session, parent_id, attribute, jss::JSString)
     return tojsstring(jss)
 end
 
+render_node(session::Session, x) = x
 
-function jsrender(session::Session, x::Hyperscript.Node)
-    return x
-end
-
-function jsrender(session::Session, node::Hyperscript.Node)
+function render_node(session::Session, node::Node)
     # give each node a unique id inside the dom
     node_id = string(uuid4())
-    newchildren = map(Hyperscript.children(node)) do elem
-        x = jsrender(session, elem)
-        add_observables!(session, x)
-        return x
+    new_attributes = Dict{String, Any}(
+        "data-jscall-id" => node_id
+    )
+    newchildren = map(children(node)) do elem
+        childnode = jsrender(session, elem)
+        # if a transform elem::Any -> ::Node happens, we need to
+        # render the resulting node again, since the attr/children won't be
+        # lowered yet!
+        if !(elem isa Node)
+            childnode = render_node(session, childnode)
+        end
+        return childnode
     end
-
-    node_attributes = Hyperscript.attrs(node)
-    new_attributes = Dict{String, Any}(map(collect(keys(node_attributes))) do k
-        k => attribute_render(session, node_id, k, node_attributes[k])
-    end)
-    get!(new_attributes, "data-jscall-id", node_id)
-    return Hyperscript.Node(
+    for (k, v) in Hyperscript.attrs(node)
+        new_attributes[k] = attribute_render(session, node_id, k, v)
+    end
+    return Node(
         Hyperscript.context(node),
         Hyperscript.tag(node),
         newchildren,
         new_attributes
     )
+end
+
+function jsrender(session::Session, node::Node)
+    render_node(session, node)
 end

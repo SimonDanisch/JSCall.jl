@@ -16,16 +16,16 @@ function extract_scripts(jss::JSSource, result = Union{JSSource, Any}[])
     return result
 end
 
-function extract_scripts(node::Hyperscript.Node, result = Union{JSSource, Any}[])
+function extract_scripts(node::Node, result = Union{JSSource, Any}[])
     if Hyperscript.tag(node) == "script"
-        childs = Hyperscript.children(node)
+        childs = children(node)
         if length(childs) != 1
             error("Scripts need to have one chield only")
         end
         append_source!(result, first(childs))
         return result
     end
-    for elem in Hyperscript.children(node)
+    for elem in children(node)
         extract_scripts(elem, result)
     end
     return result
@@ -54,9 +54,9 @@ function add_observables!(session::Session, x::Union{Tuple, AbstractVector, Pair
         add_observables!(session, elem, visited)
     end
 end
-function add_observables!(session::Session, x::Hyperscript.Node, visited = IdDict())
+function add_observables!(session::Session, x::Node, visited = IdDict())
     get!(visited, x, nothing) !== nothing && return
-    for elem in Hyperscript.children(x)
+    for elem in children(x)
         add_observables!(session, elem, visited)
     end
     for (name, elem) in Hyperscript.attrs(x)

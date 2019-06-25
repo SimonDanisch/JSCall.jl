@@ -9,6 +9,32 @@ const EvalJavascript = '2'
 const JavascriptError = '3'
 const JavascriptWarning = '4'
 
+function get_session_id(){
+    var default_id = __session_id__
+    // check for browser support
+    if (typeof(Storage) !== "undefined") {
+      // get the session id from local storage
+      var saved_id = sessionStorage.getItem("julia-jscall-session-id");
+      if(saved_id){
+          return saved_id
+      }else{
+          sessionStorage.setItem("julia-jscall-session-id", default_id)
+          return default_id
+      }
+    } else {
+      return default_id
+    }
+}
+
+function websocket_url(){
+    // something like http://127.0.0.1:8081/
+    var http_url = window.location.href
+    var ws_url = http_url.replace("http", "ws");
+    // now should be like: ws://127.0.0.1:8081/
+    ws_url = ws_url + get_session_id() + "/"
+    console.log(ws_url)
+    return ws_url
+}
 
 function get_observable(id){
     if(id in observables){
@@ -59,7 +85,6 @@ function run_js_callbacks(id, value){
         }
     }
 }
-
 
 
 
@@ -159,7 +184,5 @@ function setup_connection(){
             }
         }
     }
-    var url = __websock_url__
-    console.log("Trying to connect to " + url)
-    tryconnect(url)
+    tryconnect(websocket_url())
 }
