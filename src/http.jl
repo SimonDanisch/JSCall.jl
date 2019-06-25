@@ -24,16 +24,38 @@ A web session with a user
 struct Session
     connection::Ref{WebSocket}
     observables::Dict{String, Tuple{Bool, Observable}} # Bool -> if already registered with Frontend
+    message_queue::Vector{String}
 end
-Session(connection) = Session(connection, Dict{String, Tuple{Bool, Observable}}())
+Session(connection) = Session(connection, Dict{String, Tuple{Bool, Observable}}(), String[])
 
+function send_queued(session::Session)
+    if isopen(session)
+        # send all queued messages
+        for message in session.message_queue
+            write(session.connection[], message)
+        end
+        empty!(session.message_queue)
+    else
+        error("To send queued messages make sure that session is open.")
+    end
+end
 """
 Send values to the frontend via JSON for now
 """
-function Sockets.send(x::Session; kw...)
-    write(x.connection[], JSON.json(kw))
+function Sockets.send(session::Session; kw...)
+    new_msg = JSON.json(kw)
+    if isopen(session)
+        # send all queued messages
+        send_queued(session)
+        # sent the actual message
+        write(session.connection[], new_msg)
+    else
+        push!(session.message_queue, new_msg)
+    end
 end
-Base.isopen(x::Session) = isassigned(x.connection) && isopen(x.connection[])
+function Base.isopen(session::Session)
+    return isassigned(session.connection) && isopen(session.connection[])
+end
 
 struct Application
     url::String
@@ -42,9 +64,24 @@ struct Application
     sessions::Dict{String, Session}
     websocket_url::String
     server_task::Ref{Task}
-    dom::Ref{Any}
+    dom::Function
 end
 
+function Application(
+        dom, url::String, port::Int;
+        dependencies = String[],
+        websocket_url = string("ws://", url, ":", port),
+        verbose = false
+    )
+    application = Application(
+        url, port, dependencies, Dict{String, Session}(), websocket_url,
+        Ref{Task}(), dom,
+    )
+    application.server_task[] = @async HTTP.listen(url, port, verbose = verbose) do stream::Stream
+        Base.invokelatest(stream_handler, application, stream)
+    end
+    return application
+end
 include("websockets.jl")
 
 
@@ -112,12 +149,14 @@ function stream_handler(application::Application, stream::Stream)
     end
 end
 
-
 function http_handler(application::Application, request::Request)
     try
         sessionid = string(uuid4())
         session = Session(Ref{WebSocket}())
         application.sessions[sessionid] = session
+        dom = Base.invokelatest(application.dom, session, request)
+        html = repr(MIME"text/html"(), jsrender(session, dom))
+        @show html
         return string(
             """
             <!doctype html>
@@ -134,7 +173,7 @@ function http_handler(application::Application, request::Request)
             <body>
             """,
             "<div id='application-dom'>\n",
-            repr(MIME"text/html"(), jsrender(session, application.dom[])),
+            html,
             "\n</div>\n",
             "<script>setup_connection()</script>\n",
             "</body>\n</html>\n"
@@ -163,9 +202,10 @@ function websocket_handler(application, request, websocket)
             if isopen(websocket)
                 # Register all Observables that got put in our session
                 # via e.g. display/jsrender
-                for (id, obs) in session.observables
-                    register_obs!(session, obs)
+                for (id, (reg, obs)) in session.observables
+                    reg || register_obs!(session, obs)
                 end
+                send_queued(session)
             else
                 @error "Websocket not open, can't register observables"
             end
@@ -198,22 +238,7 @@ function websocket_handler(application, request, websocket)
 end
 
 
-function Application(
-        url::String, port::Int;
-        dependencies = String[],
-        websocket_url = string("ws://", url, ":", port),
-        verbose = false,
-        dom = nothing
-    )
-    application = Application(
-        url, port, dependencies, Dict{String, Session}(), websocket_url,
-        Ref{Task}(), Ref{Any}(dom),
-    )
-    application.server_task[] = @async HTTP.listen(url, port, verbose = verbose) do stream::Stream
-        Base.invokelatest(stream_handler, application, stream)
-    end
-    return application
-end
+
 
 
 """

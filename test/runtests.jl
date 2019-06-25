@@ -1,35 +1,38 @@
+using Hyperscript
 using JSCall, Hyperscript, Observables
 using JSCall: Application, Session, evaljs, Widget, linkjs, update_dom!, div, active_sessions
 using JSCall: @js_str, font, onjs, Button, TextField
 
-
+function dom_handler(session, request)
+    tf = JSCall.TextField("hi")
+    test_db = [
+        "Batti",
+        "Schorsch",
+        "Simon"
+    ]
+    result = map(tf.value) do str
+        s = filter(x-> occursin(str, x), test_db)
+        if isempty(s)
+            "Nothing found!"
+        else
+            first(s)
+        end
+    end
+    return JSCall.div(tf, result)
+end
 app = Application(
-    "127.0.0.1", 8081,
-    verbose = true,
-    dom = "hi"
+    dom_handler, "127.0.0.1", 8081,
+    verbose = true
 )
-JSCall.websocket_exceptions[1]
+app.sessions
 id, session = last(active_sessions(app))
+JSCall.send_queued(session)
 # open browser, go to http://127.0.0.1:8081/
 # Test if connection is working:
 
 
-tf = JSCall.TextField("hi")
-test_db = [
-    "Batti",
-    "Schorsch",
-    "Simon"
-]
 
-result = map(tf.value) do str
-    s = filter(x-> occursin(str, x), test_db)
-    if isempty(s)
-        "Nothing found!"
-    else
-        first(s)
-    end
-end
-update_dom!(session, JSCall.div(tf, result))
+update_dom!(session, )
 JSCall.jsrender(session, tf)
 update_dom!(session, )
 # display a widget
@@ -114,3 +117,16 @@ update_htm($dom, newhtml)
 """
 sprint(io-> JSCall.tojsstring(io, x))
 x.source
+
+using DataFrames
+
+x = [
+    (hi = "hi", bla = "bla"),
+    (hi = 22, bla = rand(10)),
+    (hi = 33, bla = rand(10)),
+    (bla = rand(10), hi = 222),
+]
+
+open("test.csv", "w") do io
+    show(io, MIME"text/csv"(), x)
+end

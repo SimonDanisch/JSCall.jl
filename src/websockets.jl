@@ -46,6 +46,7 @@ function upgrade_websocket(application::Application, stream::Stream)
     try
         websocket_handler(application, stream.message, ws)
     catch e
+        Base.show_backtrace(stderr, Base.catch_backtrace())
         @error "Error while applying websocket" exception=e
     finally
         close(ws)
