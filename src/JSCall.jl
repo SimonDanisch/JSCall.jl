@@ -8,6 +8,7 @@ import Sockets: send
 using Hyperscript: Node, children, tag
 
 include("js_source.jl")
+include("dependencies.jl")
 include("http.jl")
 include("util.jl")
 include("widgets.jl")

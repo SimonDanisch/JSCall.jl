@@ -4,13 +4,7 @@ Function used to interpolate into dom/javascript
 """
 tojsstring(x) = sprint(io-> tojsstring(io, x))
 tojsstring(io::IO, x) = JSON.print(io, x)
-tojsstring(io::IO, x::JSSource) = print(io, x.source)
 tojsstring(io::IO, x::Observable) = print(io, "'", x.id, "'")
-function tojsstring(io::IO, jss::JSString)
-    for elem in jss.source
-        tojsstring(io, elem)
-    end
-end
 
 const mime_order = MIME.((
     "text/html", "text/latex", "image/svg+xml", "image/png",
@@ -61,10 +55,7 @@ end
 
 function update_dom!(session::Session, dom)
     dom = jsrender(session, dom)
-    add_observables!(session, dom)
-    for (n, (reg, obs)) in session.observables
-        reg || register_obs!(session, obs)
-    end
+    register_resource!(session, dom)
     innerhtml = repr(MIME"text/html"(), dom)
     update_script = js"""
     var dom = document.getElementById('application-dom')

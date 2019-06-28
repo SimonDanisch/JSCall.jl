@@ -11,19 +11,20 @@ const JavascriptWarning = '4'
 
 function get_session_id(){
     var default_id = __session_id__
+    return default_id
     // check for browser support
-    if (typeof(Storage) !== "undefined") {
-      // get the session id from local storage
-      var saved_id = sessionStorage.getItem("julia-jscall-session-id");
-      if(saved_id){
-          return saved_id
-      }else{
-          sessionStorage.setItem("julia-jscall-session-id", default_id)
-          return default_id
-      }
-    } else {
-      return default_id
-    }
+    // if (typeof(Storage) !== "undefined") {
+    //   // get the session id from local storage
+    //   var saved_id = sessionStorage.getItem("julia-jscall-session-id");
+    //   if(saved_id){
+    //       return saved_id
+    //   }else{
+    //       sessionStorage.setItem("julia-jscall-session-id", default_id)
+    //       return default_id
+    //   }
+    // } else {
+    //   return default_id
+    // }
 }
 
 function websocket_url(){

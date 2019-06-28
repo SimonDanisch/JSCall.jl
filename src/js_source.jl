@@ -40,6 +40,21 @@ macro js_str(js_source)
     return :(JSString($value_array))
 end
 
-append_source!(x::JSSource, value::String) = push!(x.source, JSSource(value))
-append_source!(x::JSSource, value::JSString) = push!(x.source, value)
-append_source!(x::JSSource, value::JSSource) = append!(x.source, value.source)
+append_source!(x::JSString, value::String) = push!(x.source, JSSource(value))
+append_source!(x::JSString, value::JSSource) = push!(x.source, value)
+append_source!(x::JSString, value::JSString) = append!(x.source, value.source)
+
+# Handle interpolation into javascript
+tojsstring(io::IO, x::JSSource) = print(io, x.source)
+function tojsstring(io::IO, jss::JSString)
+    for elem in jss.source
+        tojsstring(io, elem)
+    end
+end
+
+function tojsstring(io::IO, jsss::AbstractVector{JSString})
+    for elem in jsss
+        tojsstring(io, elem)
+        println(io)
+    end
+end

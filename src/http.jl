@@ -25,8 +25,39 @@ struct Session
     connection::Ref{WebSocket}
     observables::Dict{String, Tuple{Bool, Observable}} # Bool -> if already registered with Frontend
     message_queue::Vector{String}
+    dependencies::Set{Asset}
+    on_document_load::Vector{JSString}
 end
-Session(connection) = Session(connection, Dict{String, Tuple{Bool, Observable}}(), String[])
+
+function Session(connection)
+    Session(
+        connection,
+        Dict{String, Tuple{Bool, Observable}}(),
+        String[],
+        Set{Asset}(),
+        JSString[]
+    )
+end
+
+function Base.push!(session::Session, x::Observable)
+    session.observables[x.id] = (false, x)
+end
+
+function Base.push!(session::Session, dependency::Dependency)
+    for asset in dependency.assets
+        push!(session, asset)
+    end
+    return dependency
+end
+
+function Base.push!(session::Session, asset::Asset)
+    push!(session.dependencies, asset)
+    if asset.onload !== nothing
+        on_document_load(session, asset.onload)
+    end
+    return asset
+end
+
 
 function send_queued(session::Session)
     if isopen(session)
@@ -155,29 +186,59 @@ function http_handler(application::Application, request::Request)
         session = Session(Ref{WebSocket}())
         application.sessions[sessionid] = session
         dom = Base.invokelatest(application.dom, session, request)
-        html = repr(MIME"text/html"(), jsrender(session, dom))
-        @show html
-        return string(
-            """
-            <!doctype html>
-            <html>
-            <head>
-            <meta charset="UTF-8">
-            """,
-            "<script>\n",
-            js_source(application.websocket_url, sessionid),
-            "</script>\n",
-            """
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            </head>
-            <body>
-            """,
-            "<div id='application-dom'>\n",
-            html,
-            "\n</div>\n",
-            "<script>setup_connection()</script>\n",
-            "</body>\n</html>\n"
-        )
+        js_dom = jsrender(session, dom)
+        html = repr(MIME"text/html"(), js_dom)
+        register_resource!(session, js_dom)
+        register_resource!(session, session.on_document_load)
+
+        return sprint() do io
+            print(io, """
+                <!doctype html>
+                <html>
+                <head>
+                <meta charset="UTF-8">
+            """)
+            # Insert all script/css dependencies into the header
+            tojsstring(io, session.dependencies)
+
+            print(io, """
+                <script>
+                """,
+                js_source(application.websocket_url, sessionid),
+                """
+                function __on_document_load__(){
+                """
+            )
+            # create a function we call in body onload =, which loads all
+            # on_document_load javascript
+            tojsstring(io, session.on_document_load)
+            print(io, """
+                }
+                </script>
+                """
+            )
+            print(io, """
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                </head>
+                <body"""
+            )
+
+            if !isempty(session.on_document_load)
+                # insert on document load javascript if we have any
+                print(io, " onload = '__on_document_load__()'")
+            end
+            print(io, """>
+                <div id='application-dom'>
+                """
+            )
+            println(io, html, "\n</div>")
+            print(io, """
+                <script>setup_connection()</script>
+                </body>
+                </html>
+                """
+            )
+        end
     catch e
         @warn "error in handler" exception=e
         return "error :(\n$e"
@@ -203,6 +264,7 @@ function websocket_handler(application, request, websocket)
                 # Register all Observables that got put in our session
                 # via e.g. display/jsrender
                 for (id, (reg, obs)) in session.observables
+                    @show id reg
                     reg || register_obs!(session, obs)
                 end
                 send_queued(session)
@@ -226,15 +288,22 @@ function websocket_handler(application, request, websocket)
                     end
                 catch e
                     if e isa WebSockets.WebSocketClosedError
-                        delete!(application.sessions, sessionid)
+                        for (k, (reg, obs)) in session.observables
+                            @show k reg
+                            session.observables[k] = (false, obs)
+                        end
+                        #delete!(application.sessions, sessionid)
                     else
                         @error "Websocket error:" exception = e
                     end
                 end
             end
+        else
+            @warn "Unrecognized session id: $sessionid"
         end
+    else
+        @warn "Unrecognized Websocket route: $(request.target)"
     end
-    @warn "Unrecognized Websocket route: $(request.target)"
 end
 
 
@@ -250,14 +319,7 @@ entirely in javascript, without any communication with the Julia `session`.
 """
 function onjs(session::Session, obs::Observable, func::JSString)
     # register the callback with the JS session
-    register_obs!(session, obs)
-    # TODO
-    # Does this need to be recursive? I don't think it does,
-    # since source should just be a flat list
-    for o in func.source
-        o isa Observable || continue
-        register_obs!(session, o)
-    end
+    register_resource!(session, (obs, func))
     send(
         session,
         type = OnjsCallback,
@@ -265,6 +327,23 @@ function onjs(session::Session, obs::Observable, func::JSString)
         # eval requires functions to be wrapped in ()
         payload = "(" * tojsstring(func) * ")"
     )
+end
+
+function onload(session::Session, node::Node, func::JSString)
+    on_document_load(session, js"""
+        // on document load, call func with the node
+        ($(func))($node)
+    """)
+end
+
+
+"""
+    on_document_load(session::Session, js::JSString)
+executes javascript after document is loaded
+"""
+function on_document_load(session::Session, js::JSString)
+    register_resource!(session, js)
+    push!(session.on_document_load, js)
 end
 
 """
@@ -294,7 +373,7 @@ end
 Evaluate a javascript script in `session`.
 """
 function evaljs(session::Session, jss::JSString)
-    add_observables!(session, jss)
+    register_resource!(session, jss)
     jssss = tojsstring(jss)
     send(session, type = EvalJavascript, payload = jssss)
 end

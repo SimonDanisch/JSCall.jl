@@ -1,24 +1,16 @@
 using Hyperscript
 using JSCall, Hyperscript, Observables
-using JSCall: Application, Session, evaljs, Widget, linkjs, update_dom!, div, active_sessions
-using JSCall: @js_str, font, onjs, Button, TextField
+using JSCall: Application, Session, evaljs, linkjs, update_dom!, div, active_sessions
+using JSCall: @js_str, font, onjs, Button, TextField, Slider, JSSource
 
+global s_slider = nothing
 function dom_handler(session, request)
-    tf = JSCall.TextField("hi")
-    test_db = [
-        "Batti",
-        "Schorsch",
-        "Simon"
-    ]
-    result = map(tf.value) do str
-        s = filter(x-> occursin(str, x), test_db)
-        if isempty(s)
-            "Nothing found!"
-        else
-            first(s)
-        end
+    global s_slider
+    s_slider = JSCall.RangeSlider(1:10, value = [2, 5])
+    map(s_slider.value) do x
+        println(x)
     end
-    return JSCall.div(tf, result)
+    return div(s_slider)
 end
 app = Application(
     dom_handler, "127.0.0.1", 8081,
@@ -26,15 +18,35 @@ app = Application(
 )
 app.sessions
 id, session = last(active_sessions(app))
-JSCall.send_queued(session)
-# open browser, go to http://127.0.0.1:8081/
+session.dependencies
+JSCall.noUiSlider
+
+slider = JSCall.RangeSlider(1:10, value = [2, 5])
+
+slider.value[]
+x = div("hi")
+y = js"""
+$x
+"""
+z = JSCall.jsrender(session, x)
+
+JSCall.tojsstring(y)
+
 # Test if connection is working:
+@tags link
+@tags span
+@tags_noescape style
+bulma = (
+    link(rel="stylesheet", href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.5/css/bulma.min.css"),
+    link(rel="stylesheet", href="https://wikiki.github.io/css/documentation.css?v=201904261505")
+)
 
+nobulma = link(rel="stylesheet", href="https://meyerweb.com/eric/tools/css/reset/reset200802.css")
 
+update_dom!(session, div(div(id = "foo", bulma...), div(Button("hi"), Slider(1:200, class = "slider"))))
+update_dom!(session, div(style(bulma..., Button("hi", class = "button")), Slider(1:200, class = "slider")))
 
-update_dom!(session, )
-JSCall.jsrender(session, tf)
-update_dom!(session, )
+Style(bu)
 # display a widget
 w1 = Widget(1:100)
 w2 = Widget(1:100)
@@ -130,3 +142,26 @@ x = [
 open("test.csv", "w") do io
     show(io, MIME"text/csv"(), x)
 end
+
+
+using SQLite, DataFrames
+
+db = SQLite.DB("test.sqlite")
+dataframe = DataFrame(
+    x = ["hii", "blub", "blaa"],
+    y = rand(3),
+    z = [1,2,3]
+)
+SQLite.load!(db, "temp")(dataframe)
+
+SQLite.columns(db, "temp")
+
+SQLite.Query(db, "SELECT x, LastName FROM Employee WHERE LastName REGEXP 'e(?=a)'") |> DataFrame
+
+div(dataJscallId = "hi")
+
+
+using Test
+
+@test false
+@test true

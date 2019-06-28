@@ -1,65 +1,44 @@
 
-function only_html(io::IO, dom)
-    rtcx = Hyperscript.RenderContext(true, "    ", 0, Hyperscript.NoScripts)
-    Hyperscript.render(io, rtcx, dom)
+function walk_dom(f, session::Session, x::JSString, visited = IdDict())
+    walk_dom(f, session, x.source, visited)
 end
 
-function extract_scripts(vec::AbstractVector, result = Union{JSSource, Any}[])
-    for elem in vec
-        extract_scripts(elem, result)
-    end
-    return result
-end
+walk_dom(f, session::Session, x, visited = IdDict()) = f(x)
 
-function extract_scripts(jss::JSSource, result = Union{JSSource, Any}[])
-    append_source!(result, jss)
-    return result
-end
-
-function extract_scripts(node::Node, result = Union{JSSource, Any}[])
-    if Hyperscript.tag(node) == "script"
-        childs = children(node)
-        if length(childs) != 1
-            error("Scripts need to have one chield only")
-        end
-        append_source!(result, first(childs))
-        return result
-    end
-    for elem in children(node)
-        extract_scripts(elem, result)
-    end
-    return result
-end
-
-
-function add_observables!(session::Session, x::Observable, visited = IdDict())
-    # If we already have a connection immediately register with frontend:
-    if isopen(session)
-        register_obs!(session, x)
-    else
-        # only add to session. Will register with fronted on websocket connect!
-        session.observables[x.id] = (false, x)
-    end
-end
-
-function add_observables!(session::Session, x::JSString, visited = IdDict())
-    add_observables!(session, x.source, visited)
-end
-function add_observables!(session::Session, x, visited = IdDict())
- #nothing to do here
-end
-function add_observables!(session::Session, x::Union{Tuple, AbstractVector, Pair}, visited = IdDict()) where T
+function walk_dom(f, session::Session, x::Union{Tuple, AbstractVector, Pair}, visited = IdDict()) where T
     get!(visited, x, nothing) !== nothing && return
     for elem in x
-        add_observables!(session, elem, visited)
+        walk_dom(f, session, elem, visited)
     end
 end
-function add_observables!(session::Session, x::Node, visited = IdDict())
+function walk_dom(f, session::Session, x::Node, visited = IdDict())
     get!(visited, x, nothing) !== nothing && return
     for elem in children(x)
-        add_observables!(session, elem, visited)
+        walk_dom(f, session, elem, visited)
     end
     for (name, elem) in Hyperscript.attrs(x)
-        add_observables!(session, elem, visited)
+        walk_dom(f, session, elem, visited)
+    end
+end
+
+
+register_resource!(session::Session, @nospecialize(jss)) = nothing # do nothing for unknown type
+
+function register_resource!(session::Session, list::Union{Tuple, AbstractVector, Pair})
+    for elem in list
+        register_resource!(session, elem)
+    end
+end
+
+function register_resource!(session::Session, jss::JSString)
+    register_resource!(session, jss.source)
+end
+function register_resource!(session::Session, asset::Union{Asset, Dependency, Observable})
+    push!(session, asset)
+end
+
+function register_resource!(session::Session, node::Node)
+    walk_dom(session, node) do x
+        register_resource!(session, x)
     end
 end
