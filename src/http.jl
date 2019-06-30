@@ -41,7 +41,8 @@ function dom2html(io::IO, session::Session, sessionid::String, dom)
         <html>
         <head>
         <meta charset="UTF-8">
-    """)
+        """
+    )
     # Insert all script/css dependencies into the header
     tojsstring(io, session.dependencies)
 
@@ -86,8 +87,6 @@ end
 
 include("mimetypes.jl")
 
-
-
 function http_handler(application::Application, request::Request)
     try
         if haskey(AssetRegistry.registry, request.target)
@@ -123,6 +122,7 @@ end
 Handles the incoming websocket messages from the frontend
 """
 function handle_ws_message(session::Session, message)
+    isempty(message) && return
     data = JSON.parse(String(message))
     typ = data["type"]
     if typ == UpdateObservable
@@ -148,7 +148,8 @@ function websocket_handler(
         application::Application, request::Request, websocket::WebSocket
     )
     if length(request.target) > 2 # for /id/
-        sessionid = request.target[2:end-1] # remove the '/' id '/'
+        sessionid = split(request.target, "/", keepempty = false)[end] # remove the '/' id '/'
+        @show sessionid
         # Look up the connection in our sessions
         if haskey(application.sessions, sessionid)
             session = application.sessions[sessionid]
@@ -183,13 +184,4 @@ function websocket_handler(
     else
         @warn "Unrecognized Websocket route: $(request.target)"
     end
-end
-
-
-function js_source(sessionid)
-    src = read(joinpath(@__DIR__, "core.js"), String)
-    return replace(
-        src,
-        "__session_id__" => repr(sessionid)
-    )
 end

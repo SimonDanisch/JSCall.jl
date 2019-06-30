@@ -1,4 +1,4 @@
-const observables = {}
+const registered_observables = {}
 const observable_callbacks = {}
 websocket = null
 
@@ -34,14 +34,17 @@ function websocket_url(){
     var http_url = window.location.href
     var ws_url = http_url.replace("http", "ws");
     // now should be like: ws://127.0.0.1:8081/
+    if(!ws_url.endsWith("/")){
+        ws_url = ws_url + "/"
+    }
     ws_url = ws_url + get_session_id() + "/"
     console.log(ws_url)
     return ws_url
 }
 
 function get_observable(id){
-    if(id in observables){
-        return observables[id]
+    if(id in registered_observables){
+        return registered_observables[id]
     }else{
         throw ("Can't find observable with id: " + id)
     }
@@ -92,9 +95,9 @@ function run_js_callbacks(id, value){
 
 
 function update_obs(id, value){
-    if(id in observables){
+    if(id in registered_observables){
         try{
-            observables[id] = value
+            registered_observables[id] = value
             // call onjs callbacks
             run_js_callbacks(id, value)
             // update Julia side!
@@ -130,7 +133,7 @@ function setup_connection(){
                     case UpdateObservable:
                         try{
                             var value = data.payload
-                            observables[data.id] = value
+                            registered_observables[data.id] = value
                             // update all onjs callbacks
                             run_js_callbacks(data.id, value)
                         }catch(exception){

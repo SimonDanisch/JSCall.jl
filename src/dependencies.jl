@@ -23,6 +23,7 @@ function Asset(online_path::String, onload::Union{Nothing, JSCode} = nothing)
             download(online_path, dependency_path(basename(online_path)))
         catch e
             @warn "Download for $online_path failed" exception=e
+            local_path = ""
         end
         real_online_path = online_path
     else
@@ -71,7 +72,7 @@ function tojsstring(io::IO, asset::Asset)
     if mediatype(asset) == :js
         println(
             io,
-            "<script type=\"text/javascript\" charset=\"utf-8\" src = $(repr(url(asset)))></script>"
+            "<script type=\"text/javascript\" charset=\"utf-8\" src = $(repr(url(asset))) async = false></script>"
         )
     elseif mediatype(asset) == :css
         println(
@@ -88,5 +89,11 @@ function tojsstring(io::IO, dependency::Dependency)
     print(io, dependency.name)
 end
 
+# With this, one can just put a dependency anywhere in the dom to get loaded
+function jsrender(session::Session, x::Dependency)
+    push!(session, x)
+    # TODO implement returning nothing to just not be in the dom directly
+    div(display = "none", visibility = "hidden")
+end
 
 const JSCallLib = Asset(dependency_path("core.js"))
