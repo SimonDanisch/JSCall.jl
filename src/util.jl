@@ -1,5 +1,5 @@
 
-function walk_dom(f, session::Session, x::JSString, visited = IdDict())
+function walk_dom(f, session::Session, x::JSCode, visited = IdDict())
     walk_dom(f, session, x.source, visited)
 end
 
@@ -11,6 +11,7 @@ function walk_dom(f, session::Session, x::Union{Tuple, AbstractVector, Pair}, vi
         walk_dom(f, session, elem, visited)
     end
 end
+
 function walk_dom(f, session::Session, x::Node, visited = IdDict())
     get!(visited, x, nothing) !== nothing && return
     for elem in children(x)
@@ -22,23 +23,17 @@ function walk_dom(f, session::Session, x::Node, visited = IdDict())
 end
 
 
-register_resource!(session::Session, @nospecialize(jss)) = nothing # do nothing for unknown type
 
-function register_resource!(session::Session, list::Union{Tuple, AbstractVector, Pair})
-    for elem in list
-        register_resource!(session, elem)
+const mime_order = MIME.((
+    "text/html", "text/latex", "image/svg+xml", "image/png",
+    "image/jpeg", "text/markdown", "application/javascript", "text/plain"
+))
+
+function richest_mime(val)
+    for mimetype in mime_order
+        showable(mimetype, val) && return mimetype
     end
+    error("value not writable for any mimetypes")
 end
 
-function register_resource!(session::Session, jss::JSString)
-    register_resource!(session, jss.source)
-end
-function register_resource!(session::Session, asset::Union{Asset, Dependency, Observable})
-    push!(session, asset)
-end
-
-function register_resource!(session::Session, node::Node)
-    walk_dom(session, node) do x
-        register_resource!(session, x)
-    end
-end
+repr_richest(x) = repr(richest_mime(x), x)

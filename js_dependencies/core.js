@@ -10,8 +10,10 @@ const JavascriptError = '3'
 const JavascriptWarning = '4'
 
 function get_session_id(){
-    var default_id = __session_id__
-    return default_id
+    return window.js_call_session_id
+    // TODO, well this was a fun idea, but how do I initialize the http
+    // session correctly? I'd need to know the stored session id in the http request already
+    // From all I know, this is only possible with cookies?
     // check for browser support
     // if (typeof(Storage) !== "undefined") {
     //   // get the session id from local storage
@@ -117,8 +119,6 @@ function update_obs(id, value){
 function websocket_send(data){
     websocket.send(JSON.stringify(data))
 }
-
-
 
 function setup_connection(){
     function tryconnect(url) {

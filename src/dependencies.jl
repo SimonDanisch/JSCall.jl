@@ -1,34 +1,32 @@
-struct Asset
-    media_type::Symbol
-    # We try to always have online & local files for assets
-    # If you only give an online resource, we will download it
-    # to also be able to host it locally
-    online_path::String
-    local_path::String
-    onload::Union{Nothing, JSString}
-end
+dependency_path(paths...) = joinpath(@__DIR__, "..", "js_dependencies", paths...)
+
 mediatype(asset::Asset) = asset.media_type
-url(asset::Asset) = asset.online_path
+function url(asset::Asset)
+    if !isempty(asset.online_path)
+        return asset.online_path
+    else
+        return AssetRegistry.register(asset.local_path)
+    end
+end
 
 """
-    Asset(path_onload::Pair{String, JSString})
+    Asset(path_onload::Pair{String, JSCode})
 
 Convenience constructor to make `Asset.(["path/to/asset" => js"onload"])`` work!
 """
-Asset(path_onload::Pair{String, JSString}) = Asset(path_onload...)
+Asset(path_onload::Pair{String, JSCode}) = Asset(path_onload...)
 
-function Asset(online_path::String, onload::Union{Nothing, JSString} = nothing)
+function Asset(online_path::String, onload::Union{Nothing, JSCode} = nothing)
     local_path = ""; real_online_path = ""
     if is_online(online_path)
         local_path = try
-            download(online_path)
+            download(online_path, dependency_path(basename(online_path)))
         catch e
             @warn "Download for $online_path failed" exception=e
-            ""
         end
         real_online_path = online_path
     else
-        loca_path = online_path
+        local_path = online_path
     end
     return Asset(Symbol(getextension(online_path)), real_online_path, local_path, onload)
 end
@@ -55,12 +53,6 @@ a remote resource that is hosted on, for example, a CDN).
 """
 is_online(path) = any(startswith.(path, ("//", "https://", "http://", "ftp://")))
 
-
-struct Dependency
-    name::Symbol
-    assets::Vector{Asset}
-end
-
 function Dependency(name::Symbol, urls::AbstractVector)
     Dependency(
         name,
@@ -74,6 +66,7 @@ function tojsstring(io::IO, assets::Set{Asset})
         println(io)
     end
 end
+
 function tojsstring(io::IO, asset::Asset)
     if mediatype(asset) == :js
         println(
@@ -94,3 +87,6 @@ end
 function tojsstring(io::IO, dependency::Dependency)
     print(io, dependency.name)
 end
+
+
+const JSCallLib = Asset(dependency_path("core.js"))

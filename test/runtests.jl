@@ -1,34 +1,59 @@
 using Hyperscript
 using JSCall, Hyperscript, Observables
 using JSCall: Application, Session, evaljs, linkjs, update_dom!, div, active_sessions
-using JSCall: @js_str, font, onjs, Button, TextField, Slider, JSSource
+using JSCall: @js_str, font, onjs, Button, TextField, Slider, JSString
 
-global s_slider = nothing
+THREE = JSCall.Dependency(
+  :THREE,
+  ["https://cdnjs.cloudflare.com/ajax/libs/three.js/103/three.js"],
+)
+
 function dom_handler(session, request)
-    global s_slider
-    s_slider = JSCall.RangeSlider(1:10, value = [2, 5])
-    map(s_slider.value) do x
-        println(x)
-    end
-    return div(s_slider)
+    dom = div(width = 500, height = 500)
+    JSCall.onload(session, dom, js"""
+        function three_div(container){
+            console.log(container)
+            var scene = new $(THREE).Scene()
+            var width = 500
+            var height = 500
+            // Create a basic perspective camera
+            var camera = new $(THREE).PerspectiveCamera(75, width / height, 0.1, 1000)
+            camera.position.z = 4
+            var renderer = new $(THREE).WebGLRenderer({antialias: true})
+            renderer.setSize(width, height)
+            renderer.setClearColor("#ffffff")
+            var geometry = new $(THREE).BoxGeometry(1.0, 1.0, 1.0)
+            var material = new $(THREE).MeshBasicMaterial({color: "#433F81"})
+            var cube = new $(THREE).Mesh(geometry, material);
+            scene.add(cube)
+            container.appendChild(renderer.domElement);
+            renderer.render(scene, camera)
+        }
+    """)
+    return dom
 end
+
+
+function dom_handler(session, request)
+    s = Slider(1:10)
+    b = Button("hi")
+    t = TextField("lol")
+    on(s) do value
+        println(value)
+    end
+    return div(s, b, t)
+end
+
 app = Application(
     dom_handler, "127.0.0.1", 8081,
     verbose = true
 )
-app.sessions
+
 id, session = last(active_sessions(app))
-session.dependencies
-JSCall.noUiSlider
 
-slider = JSCall.RangeSlider(1:10, value = [2, 5])
-
-slider.value[]
-x = div("hi")
-y = js"""
-$x
-"""
-z = JSCall.jsrender(session, x)
+empty!(session.on_document_load)
+empty!(session.dependencies)
+update_dom!(session, dom)
 
 JSCall.tojsstring(y)
 

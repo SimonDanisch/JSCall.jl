@@ -86,20 +86,20 @@ function JSObject(jso::JSObject, typ::Symbol)
     return jsonew
 end
 
-tojsexpr(x::String) = JSString(x)
-tojsexpr(x::JSString) = x
+tojsexpr(x::String) = JSCode(x)
+tojsexpr(x::JSCode) = x
 tojsexpr(x) = error("$(typeof(x)) is not convertible to a JS string / expression")
 
 """
     evaljs(
-        jso::JSObject, js::Union{JSString, String};
+        jso::JSObject, js::Union{JSCode, String};
         try_fetch = false, try_seconds = 2
     )
 
 Evaluates Javascript in the scope of JSObject
 """
 function WebIO.evaljs(
-        jso::JSObject, js::Union{JSString, AbstractString};
+        jso::JSObject, js::Union{JSCode, AbstractString};
     )
     jse = tojsexpr(js)
     eval_javascript!(scope(jso), jse)
@@ -216,7 +216,7 @@ struct NoValue end
 JSON.lower(x::NoValue) = ""
 
 
-const eval_queue = Dict{UInt64, Tuple{Bool, Vector{JSString}}}()
+const eval_queue = Dict{UInt64, Tuple{Bool, Vector{JSCode}}}()
 
 function set_batchmode!(scope::Session, mode::Bool)
     bm, queue = get_queue!(scope)
@@ -229,7 +229,7 @@ function get_queue!(scope::Session; init_batchmode = true)
         finalizer(scope) do
             delete!(eval_queue, id)
         end
-        (init_batchmode, JSString[])
+        (init_batchmode, JSCode[])
     end
     return batchmode, queue
 end
@@ -270,12 +270,12 @@ fused(f, jsm::AbstractJSObject) = fused(f, scope(jsm))
 
 """
     queued_javascript(scope::Session)
-Get's one JSString containing all javascript that got queued up untill
+Get's one JSCode containing all javascript that got queued up untill
 calling this function. Empties the queue and sets mode to not batched!
 """
 function queued_javascript!(scope::Session)
     bm, queue = get_queue!(scope)
-    return JSString(sprint() do io
+    return JSCode(sprint() do io
         for elem in queue
             println(io, elem)
         end
@@ -284,18 +284,18 @@ function queued_javascript!(scope::Session)
     end)
 end
 
-function enqueue_javascript!(scope::Session, js::JSString)
+function enqueue_javascript!(scope::Session, js::JSCode)
     bm, queue = get_queue!(scope)
     push!(queue, js)
     return scope
 end
 
 """
-    eval_javascript(scope::Session, js::JSString)
+    eval_javascript(scope::Session, js::JSCode)
 Evals the javascript code `js` in `scope`. If batchmode is true,
 it will just queue the execution. If not, it will execute all js up to this point.
 """
-function eval_javascript!(scope::Session, js::JSString)
+function eval_javascript!(scope::Session, js::JSCode)
     batchmode, queue = get_queue!(scope)
     enqueue_javascript!(scope, js)
     if !batchmode
@@ -378,7 +378,7 @@ macro jsfun(expr)
         argstr = join(map(x-> sprint(io-> WebIO.showjs(io, WebIO.tojs(x))), args), ", ")
         result = JSObject(:result, scope(jso), :object)
         result_js = WebIO.tojs(result)
-        jss = JSString(string($(jss...)))
+        jss = JSCode(string($(jss...)))
         jss = "$result_js = ($jss)($argstr)"
         evaljs(jso, jss)
         return result

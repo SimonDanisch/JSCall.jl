@@ -1,3 +1,17 @@
+
+const global_unique_dom_id_counter = Ref(0)
+
+"""
+    get_unique_dom_id()
+
+We could use a unique ID like uuid4, but since every dom element gets
+such an id, I prefer to keep the id as short as possible, so we just use a counter.
+"""
+function get_unique_dom_id()
+    global_unique_dom_id_counter[] += 1
+    return string(global_unique_dom_id_counter[])
+end
+
 @tags div input font
 @tags_noescape style script
 
@@ -20,7 +34,7 @@ function attribute_render(session, parent, attribute, obs::Observable)
     return attribute_render(session, parent, attribute, obs[])
 end
 
-function attribute_render(session, parent, attribute, jss::JSString)
+function attribute_render(session, parent, attribute, jss::JSCode)
     return tojsstring(jss)
 end
 
@@ -28,7 +42,7 @@ render_node(session::Session, x) = x
 
 function render_node(session::Session, node::Node)
     # give each node a unique id inside the dom
-    node_id = string(uuid4())
+    node_id = get_unique_dom_id()
     # pretty hacky, but this is the only way I can think of right now
     # to make sure that we always have a unique id for a node
     get!(Hyperscript.attrs(node), "data-jscall-id", node_id)
@@ -54,6 +68,8 @@ function render_node(session::Session, node::Node)
     )
 end
 
+# jsrender(session, x) will be called anywhere...
+# if there is nothing sessions specific in the dom, fallback to jsrender without session
 function jsrender(session::Session, node::Node)
     render_node(session, node)
 end
@@ -71,3 +87,18 @@ function tojsstring(io::IO, node::Node)
     # improving this would be nice
     print(io, "(document.querySelector('[data-jscall-id=$(repr(uuid(node)))]'))")
 end
+
+
+
+"""
+    jsrender([::Session], x::Any)
+Internal render method to create a valid dom. Registers used observables with a session
+And makes sure the dom only contains valid elements. Overload jsrender(::YourType)
+To enable putting YourType into a dom element/div.
+You can also overload it to take a session as first argument, to register
+messages with the current web session (e.g. via onjs).
+"""
+jsrender(::Session, x::Any) = jsrender(x)
+
+jsrender(::Session, x::String) = x
+jsrender(::Session, x::Hyperscript.Styled) = x
