@@ -40,8 +40,12 @@ const WebMimes = (
     MIME"application/vnd.webio.application+html"
 )
 
+struct DisplayInline
+    dom
+end
+
 for M in WebMimes
-    @eval function Base.show(io::IO, m::$M, dom::Node)
+    @eval function Base.show(io::IO, m::$M, dom::DisplayInline)
         if !isassigned(global_application)
             global_application[] = Application(
                 atom_dom_handler,
@@ -55,7 +59,7 @@ for M in WebMimes
         session = Session(Ref{WebSocket}())
         application.sessions[sessionid] = session
         plotpane_pages[sessionid] = dom
-        print(io, "<iframe src=\"http://localhost:8081/$(sessionid)\" frameBorder=\"0\" width=\"100%\" height=\"100%\"></iframe>")
+        dom2html(io, session, sessionid, dom.dom)
     end
 end
 

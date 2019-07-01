@@ -41,11 +41,6 @@ function JSCall.jsrender(session::Session, ::ThreeScene)
 end
 
 div(ThreeScene())
-JSCall.plotpane_pages |> first |> first
-JSCall.plotpane_pages |> first
-
-
-
 
 using JSCall, Observables
 using JSCall: Dependency, div, @js_str, font, onjs, Button, TextField, Slider, JSString
@@ -68,4 +63,31 @@ bulma = Dependency(
 )
 
 JSCall.div(bulma, s, b, t)
-data:text/html,<iframe src="http://localhost:8081/653fdc85-c75c-403e-b5fa-cdccb99f2cb5" frameBorder="0" width="100%" height="100%"></iframe>
+
+
+function dom_handler(session, request)
+    s = Slider(1:10)
+    b = Button("hi")
+    t = TextField("lol")
+    on(s) do value
+        println(value)
+    end
+    on(t) do text
+        println(text)
+    end
+    bulma = Dependency(
+        :Bulma,
+        [
+            "https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.5/css/bulma.min.css",
+            "https://wikiki.github.io/css/documentation.css?v=201904261505"
+        ]
+    )
+    return JSCall.div(bulma, s, b, t)
+end
+
+app = JSCall.Application(
+    dom_handler,
+    get(ENV, "WEBIO_SERVER_HOST_URL", "127.0.0.1"),
+    parse(Int, get(ENV, "WEBIO_HTTP_PORT", "8081")),
+    verbose = true
+)
