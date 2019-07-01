@@ -51,7 +51,7 @@ for M in WebMimes
                 atom_dom_handler,
                 get(ENV, "WEBIO_SERVER_HOST_URL", "127.0.0.1"),
                 parse(Int, get(ENV, "WEBIO_HTTP_PORT", "8081")),
-                verbose = true
+                verbose = get(ENV, "JSCALL_VERBOSITY_LEVEL", "false") == "true"
             )
         end
         application = global_application[]
