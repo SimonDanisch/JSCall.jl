@@ -52,7 +52,7 @@ function dom2html(io::IO, session::Session, sessionid::String, dom)
     """)
     if !isempty(url_proxy[])
         print(io, """
-            window.websocket_proxy_url = $(url_proxy[])
+            window.websocket_proxy_url = $(repr(url_proxy[]))
             """
         )
     end
