@@ -16,7 +16,7 @@ function url(asset::Asset)
     if !isempty(asset.online_path)
         return asset.online_path
     else
-        return joinpath(url_proxy[], AssetRegistry.register(asset.local_path))
+        return url_proxy[] * AssetRegistry.register(asset.local_path)
     end
 end
 
