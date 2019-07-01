@@ -190,3 +190,5 @@ function setup_connection(){
     }
     tryconnect(websocket_url())
 }
+
+setup_connection()

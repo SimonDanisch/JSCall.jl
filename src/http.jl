@@ -45,7 +45,7 @@ function dom2html(io::IO, session::Session, sessionid::String, dom)
     )
     # Insert all script/css dependencies into the header
     tojsstring(io, session.dependencies)
-
+    # insert the javascript for JSCall
     print(io, """
         <script>
         window.js_call_session_id = $(repr(sessionid))
@@ -60,8 +60,8 @@ function dom2html(io::IO, session::Session, sessionid::String, dom)
         </script>
         """
     )
-    # insert the javascript for JSCall
     tojsstring(io, JSCallLib)
+
     print(io, """
         <meta name="viewport" content="width=device-width, initial-scale=1">
         </head>
@@ -78,7 +78,6 @@ function dom2html(io::IO, session::Session, sessionid::String, dom)
     )
     println(io, html, "\n</div>")
     print(io, """
-        <script>setup_connection()</script>
         </body>
         </html>
         """

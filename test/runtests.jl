@@ -48,8 +48,7 @@ JSCall.plotpane_pages |> first
 
 
 using JSCall, Observables
-
-using JSCall: div, @js_str, font, onjs, Button, TextField, Slider, JSString
+using JSCall: Dependency, div, @js_str, font, onjs, Button, TextField, Slider, JSString
 
 s = Slider(1:10)
 b = Button("hi")
