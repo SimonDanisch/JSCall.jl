@@ -156,7 +156,6 @@ function websocket_handler(
     )
     if length(request.target) > 2 # for /id/
         sessionid = split(request.target, "/", keepempty = false)[end] # remove the '/' id '/'
-        @show sessionid
         # Look up the connection in our sessions
         if haskey(application.sessions, sessionid)
             session = application.sessions[sessionid]
