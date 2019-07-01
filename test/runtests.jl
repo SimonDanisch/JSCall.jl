@@ -68,3 +68,4 @@ bulma = Dependency(
 )
 
 JSCall.div(bulma, s, b, t)
+data:text/html,<iframe src="http://localhost:8081/653fdc85-c75c-403e-b5fa-cdccb99f2cb5" frameBorder="0" width="100%" height="100%"></iframe>
