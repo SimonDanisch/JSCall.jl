@@ -34,22 +34,29 @@ function atom_dom_handler(session::Session, request::Request)
     end
 end
 
-function Base.show(io::IO, m::MIME"application/prs.juno.plotpane+html", dom::Node)
-    if !isassigned(global_application)
-        global_application[] = Application(
-            atom_dom_handler,
-            get(ENV, "WEBIO_SERVER_HOST_URL", "127.0.0.1"),
-            parse(Int, get(ENV, "WEBIO_HTTP_PORT", "8081")),
-            verbose = true
-        )
-    end
-    application = global_application[]
-    sessionid = string(uuid4())
-    session = Session(Ref{WebSocket}())
-    application.sessions[sessionid] = session
-    plotpane_pages[sessionid] = dom
-    print(io, "<iframe src=\"http://localhost:8081/$(sessionid)\" frameBorder=\"0\" width=\"100%\" height=\"100%\"></iframe>")
-end
+const WebMimes = (
+    MIME"text/html",
+    MIME"application/prs.juno.plotpane+html",
+    MIME"application/vnd.webio.application+html"
+)
 
+for M in WebMimes
+    @eval function Base.show(io::IO, m::$M, dom::Node)
+        if !isassigned(global_application)
+            global_application[] = Application(
+                atom_dom_handler,
+                get(ENV, "WEBIO_SERVER_HOST_URL", "127.0.0.1"),
+                parse(Int, get(ENV, "WEBIO_HTTP_PORT", "8081")),
+                verbose = true
+            )
+        end
+        application = global_application[]
+        sessionid = string(uuid4())
+        session = Session(Ref{WebSocket}())
+        application.sessions[sessionid] = session
+        plotpane_pages[sessionid] = dom
+        print(io, "<iframe src=\"http://localhost:8081/$(sessionid)\" frameBorder=\"0\" width=\"100%\" height=\"100%\"></iframe>")
+    end
+end
 
 end # module
