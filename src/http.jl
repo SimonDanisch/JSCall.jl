@@ -49,6 +49,14 @@ function dom2html(io::IO, session::Session, sessionid::String, dom)
     print(io, """
         <script>
         window.js_call_session_id = $(repr(sessionid))
+    """)
+    if !isempty(url_proxy[])
+        print(io, """
+            window.websocket_proxy_url = $(url_proxy[])
+            """
+        )
+    end
+    println(io, """
         function __on_document_load__(){
         """
     )

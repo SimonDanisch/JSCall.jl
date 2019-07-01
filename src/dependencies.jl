@@ -1,11 +1,22 @@
 dependency_path(paths...) = joinpath(@__DIR__, "..", "js_dependencies", paths...)
 
 mediatype(asset::Asset) = asset.media_type
+
+const url_proxy = Ref{String}()
+
+function __init__()
+    url = get(ENV, "JULIA_WEBIO_BASEURL", "")
+    if endswith(url, "/")
+        url = url[1:end-1]
+    end
+    url_proxy[] = url
+end
+
 function url(asset::Asset)
     if !isempty(asset.online_path)
         return asset.online_path
     else
-        return AssetRegistry.register(asset.local_path)
+        return joinpath(url_proxy[], AssetRegistry.register(asset.local_path))
     end
 end
 
