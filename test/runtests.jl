@@ -42,7 +42,7 @@ end
 
 
 using JSCall, Observables
-using JSCall: Dependency, div, @js_str, font, onjs, Button, TextField, Slider, JSString
+using JSCall: Dependency, div, @js_str, font, onjs, Button, TextField, Slider, JSString, with_session, linkjs
 
 
 function dom_handler(session, request)
@@ -71,3 +71,17 @@ app = JSCall.Application(
     parse(Int, get(ENV, "WEBIO_HTTP_PORT", "8081")),
     verbose = false
 )
+
+
+
+with_session() do session
+    s = Slider(1:10)
+    b = Button("hi")
+    t = TextField("lol")
+    linkjs(session, s.value, t.value)
+    onjs(session, b.value, js"(v)=> alert(v)")
+    on(t) do text
+        println(text)
+    end
+    return JSCall.div(s, b, t)
+end

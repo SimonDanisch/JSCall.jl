@@ -42,6 +42,23 @@ const WebMimes = (
 
 struct DisplayInline
     dom
+    session::Session
+    sessionid::String
+end
+DisplayInline(dom) = DisplayInline(dom, Session(Ref{WebSocket}()), string(uuid4()))
+DisplayInline(dom, session::Session) = DisplayInline(dom, session, string(uuid4()))
+
+
+
+"""
+    with_session(f)::DisplayInline
+
+calls f with the session, that will become active when displaying the result
+of with_session. f is expected to return a valid DOM.
+"""
+function with_session(f)
+    session = Session(Ref{WebSocket}())
+    DisplayInline(f(session), session)
 end
 
 for M in WebMimes
@@ -55,10 +72,10 @@ for M in WebMimes
             )
         end
         application = global_application[]
-        sessionid = string(uuid4())
-        session = Session(Ref{WebSocket}())
+        sessionid = dom.sessionid
+        session = dom.session
         application.sessions[sessionid] = session
-        plotpane_pages[sessionid] = dom
+        plotpane_pages[sessionid] = dom.dom
         dom2html(io, session, sessionid, dom.dom)
     end
 end
