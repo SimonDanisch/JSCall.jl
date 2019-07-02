@@ -1,7 +1,7 @@
 using Hyperscript
 using JSCall, Hyperscript, Observables
 using JSCall: Application, Session, evaljs, linkjs, update_dom!, div, active_sessions
-using JSCall: @js_str, font, onjs, Button, TextField, Slider, JSString, Dependency
+using JSCall: @js_str, font, onjs, Button, TextField, Slider, JSString, Dependency, with_session
 
 const THREE = JSCall.Dependency(
     :THREE,
@@ -44,26 +44,21 @@ end
 using JSCall, Observables
 using JSCall: Dependency, div, @js_str, font, onjs, Button, TextField, Slider, JSString, with_session, linkjs
 
-
 function dom_handler(session, request)
-    s = Slider(1:10)
+    global s_value
+    s1 = Slider(1:100)
+    s2 = Slider(1:100)
     b = Button("hi")
     t = TextField("lol")
-    on(s) do value
-        println(value)
-    end
+    s_value = s1.value
+    linkjs(session, s1.value, s2.value)
+    onjs(session, s1.value, js"(v)=> console.log(v)")
     on(t) do text
         println(text)
     end
-    # bulma = Dependency(
-    #     :Bulma,
-    #     [
-    #         "https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.5/css/bulma.min.css",
-    #         "https://wikiki.github.io/css/documentation.css"
-    #     ]
-    # )
-    return JSCall.div(s, b, t)
+    return JSCall.div(s1, s2, b, t)
 end
+# id, session = last(active_sessions(app))
 
 app = JSCall.Application(
     dom_handler,
@@ -72,16 +67,15 @@ app = JSCall.Application(
     verbose = false
 )
 
-
-
-with_session() do session
-    s = Slider(1:10)
+d = with_session() do session
+    s1 = Slider(1:100)
+    s2 = Slider(1:100)
     b = Button("hi")
     t = TextField("lol")
-    linkjs(session, s.value, t.value)
-    onjs(session, b.value, js"(v)=> alert(v)")
+    linkjs(session, s1.value, s2.value)
+    onjs(session, s1.value, js"(v)=> console.log(v)")
     on(t) do text
         println(text)
     end
-    return JSCall.div(s, b, t)
+    return JSCall.div(s1, s2, b, t)
 end

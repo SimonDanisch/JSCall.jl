@@ -35,7 +35,9 @@ end
 function dom2html(io::IO, session::Session, sessionid::String, dom)
     js_dom = jsrender(session, dom)
     html = repr(MIME"text/html"(), js_dom)
+
     register_resource!(session, js_dom)
+
     print(io, """
         <!doctype html>
         <html>
@@ -69,8 +71,9 @@ function dom2html(io::IO, session::Session, sessionid::String, dom)
         """
     )
     tojsstring(io, JSCallLib)
-
+    queued_as_script(io, session)
     print(io, """
+
         <meta name="viewport" content="width=device-width, initial-scale=1">
         </head>
         <body"""
@@ -115,7 +118,11 @@ function http_handler(application::Application, request::Request)
             session = Session(Ref{WebSocket}())
             application.sessions[sessionid] = session
             dom = Base.invokelatest(application.dom, session, request)
-            return dom2html(session, sessionid, dom)
+            return HTTP.Response(
+                200,
+                ["Content-Type" => "text/html"],
+                body = dom2html(session, sessionid, dom)
+            )
         end
     catch e
         @warn "error in handler" exception=e
@@ -179,11 +186,6 @@ function websocket_handler(
             end
             session.connection[] = websocket
             wait_timeout(()-> isopen(websocket), "Websocket not open after waiting 5.0")
-            # Register all Observables that got put in our session
-            # via e.g. display/jsrender
-            register_obs!(session)
-            # send all queued messages
-            send_queued(session)
             while isopen(websocket)
                 try
                     handle_ws_message(session, read(websocket))

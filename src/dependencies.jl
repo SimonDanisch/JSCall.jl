@@ -31,7 +31,8 @@ function Asset(online_path::String, onload::Union{Nothing, JSCode} = nothing)
     local_path = ""; real_online_path = ""
     if is_online(online_path)
         local_path = try
-            download(online_path, dependency_path(basename(online_path)))
+            #download(online_path, dependency_path(basename(online_path)))
+            ""
         catch e
             @warn "Download for $online_path failed" exception=e
             local_path = ""
@@ -83,7 +84,7 @@ function tojsstring(io::IO, asset::Asset)
     if mediatype(asset) == :js
         println(
             io,
-            "<script type=\"text/javascript\" charset=\"utf-8\" src = $(repr(url(asset))) async = false></script>"
+            "<script type=\"text/javascript\" charset=\"utf-8\" src = $(repr(url(asset)))></script>"
         )
     elseif mediatype(asset) == :css
         println(

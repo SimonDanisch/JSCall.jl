@@ -65,7 +65,7 @@ A web session with a user
 struct Session
     connection::Ref{WebSocket}
     observables::Dict{String, Tuple{Bool, Observable}} # Bool -> if already registered with Frontend
-    message_queue::Vector{String}
+    message_queue::Vector{Dict{Symbol, Any}}
     dependencies::Set{Asset}
     on_document_load::Vector{JSCode}
 end

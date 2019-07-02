@@ -65,7 +65,7 @@ function send_error(message, exception){
 function send_warning(message){
     websocket_send({
         type: JavascriptWarning,
-        payload: message
+        message: message
     })
 }
 
@@ -117,13 +117,68 @@ function update_obs(id, value){
         }
         return true
     }else{
+        // Actually, this should be an error........
+        send_warning("Observable not found " + id + ". Deregistering!")
         return false
     }
-
 }
 
 function websocket_send(data){
     websocket.send(JSON.stringify(data))
+}
+
+
+function process_message(data){
+    switch(data.type) {
+        case UpdateObservable:
+            try{
+                var value = data.payload
+                registered_observables[data.id] = value
+                // update all onjs callbacks
+                run_js_callbacks(data.id, value)
+            }catch(exception){
+                send_error(
+                    "Error while updating observable " + data.id +
+                    " from Julia!",
+                    exception
+                )
+            }
+            break;
+        case OnjsCallback:
+            try{
+                // register a callback that will executed on js side
+                // when observable updates
+                var id = data.id
+                var f = eval(data.payload);
+                var callbacks = observable_callbacks[id] || []
+                callbacks.push(f)
+                observable_callbacks[id] = callbacks
+            }catch(exception){
+                send_error(
+                    "Error while registering an onjs callback.\n" +
+                    "onjs function source:\n" +
+                    data.payload,
+                    exception
+                )
+            }
+            break;
+        case EvalJavascript:
+            try{
+                eval(data.payload);
+            }catch(exception){
+                send_error(
+                    "Error while evaling JS from Julia. Source:\n" +
+                    data.payload,
+                    exception
+                )
+            }
+            break;
+        default:
+            send_error(
+                "Unrecognized message type: " + data.id + ".",
+                ""
+            )
+    }
 }
 
 function setup_connection(){
@@ -131,57 +186,7 @@ function setup_connection(){
         websocket = new WebSocket(url);
         websocket.onopen = function () {
             websocket.onmessage = function (evt) {
-                var data = JSON.parse(evt.data)
-                switch(data.type) {
-                    case UpdateObservable:
-                        try{
-                            var value = data.payload
-                            registered_observables[data.id] = value
-                            // update all onjs callbacks
-                            run_js_callbacks(data.id, value)
-                        }catch(exception){
-                            send_error(
-                                "Error while updating observable " + data.id +
-                                " from Julia!",
-                                exception
-                            )
-                        }
-                        break;
-                    case OnjsCallback:
-                        try{
-                            // register a callback that will executed on js side
-                            // when observable updates
-                            var id = data.id
-                            var f = eval(data.payload);
-                            var callbacks = observable_callbacks[id] || []
-                            callbacks.push(f)
-                            observable_callbacks[id] = callbacks
-                        }catch(exception){
-                            send_error(
-                                "Error while registering an onjs callback.\n" +
-                                "onjs function source:\n" +
-                                data.payload,
-                                exception
-                            )
-                        }
-                        break;
-                    case EvalJavascript:
-                        try{
-                            eval(data.payload);
-                        }catch(exception){
-                            send_error(
-                                "Error while evaling JS from Julia. Source:\n" +
-                                data.payload,
-                                exception
-                            )
-                        }
-                        break;
-                    default:
-                        send_error(
-                            "Unrecognized message type: " + data.id + ".",
-                            ""
-                        )
-                }
+                process_message(JSON.parse(evt.data))
             }
         }
         websocket.onclose = function (evt) {

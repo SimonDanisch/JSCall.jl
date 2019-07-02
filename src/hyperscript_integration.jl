@@ -58,7 +58,7 @@ function render_node(session::Session, node::Node)
         return childnode
     end
     for (k, v) in Hyperscript.attrs(node)
-        new_attributes[k] = attribute_render(session, node_id, k, v)
+        new_attributes[k] = attribute_render(session, node, k, v)
     end
     return Node(
         Hyperscript.context(node),

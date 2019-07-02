@@ -1,9 +1,9 @@
 
-function Session(connection)
+function Session(connection = Ref{WebSocket}())
     Session(
         connection,
         Dict{String, Tuple{Bool, Observable}}(),
-        String[],
+        Dict{Symbol, Any}[],
         Set{Asset}(),
         JSCode[]
     )
@@ -45,7 +45,7 @@ function send_queued(session::Session)
     if isopen(session)
         # send all queued messages
         for message in session.message_queue
-            write(session.connection[], message)
+            send(session, message)
         end
         empty!(session.message_queue)
     else
@@ -53,18 +53,53 @@ function send_queued(session::Session)
     end
 end
 
+
+
 """
+    queued_as_script(session::Session)
+
+Returns all queued messages as a script that can be included into a html
+"""
+function queued_as_script(io::IO, session::Session)
+    # send all queued messages
+    println(io, "<script>")
+    # first register observables
+    for (id, (registered, observable)) in session.observables
+        if !registered
+            # Register on the JS side by sending the current value
+            updater = JSUpdateObservable(session, id)
+            # Make sure we update the Javascript values!
+            on(updater, observable)
+            session.observables[id] = (true, observable)
+            tojsstring(io, js"    registered_observables[$(observable)] = $(observable[])")
+            println(io)
+        end
+    end
+    for message in session.message_queue
+        tojsstring(io, js"    process_message($message)")
+        println(io)
+    end
+    println(io, "</script>")
+    empty!(session.message_queue)
+end
+queued_as_script(session::Session) = sprint(io-> queued_as_script(io, session))
+
+"""
+    send(session::Session; attributes...)
+
 Send values to the frontend via JSON for now
 """
-function Sockets.send(session::Session; kw...)
-    new_msg = JSON3.write(kw)
+Sockets.send(session::Session; kw...) = send(session, Dict{Symbol, Any}(kw))
+
+
+function Sockets.send(session::Session, message::Dict{Symbol, Any})
     if isopen(session)
         # send all queued messages
-        send_queued(session)
+        # send_queued(session)
         # sent the actual message
-        write(session.connection[], new_msg)
+        write(session.connection[], JSON3.write(message))
     else
-        push!(session.message_queue, new_msg)
+        push!(session.message_queue, message)
     end
 end
 

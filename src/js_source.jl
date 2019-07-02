@@ -15,6 +15,7 @@ function iterate_interpolations(source::String)
             i = i2
             push!(result, esc(expr))
             lastidx = i
+            i > lindex && break
         else
             if i == lindex
                 if !isempty(lastidx:lindex)
