@@ -55,14 +55,14 @@ function dom_handler(session, request)
     on(t) do text
         println(text)
     end
-    bulma = Dependency(
-        :Bulma,
-        [
-            "https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.5/css/bulma.min.css",
-            "https://wikiki.github.io/css/documentation.css"
-        ]
-    )
-    return JSCall.div(bulma, s, b, t)
+    # bulma = Dependency(
+    #     :Bulma,
+    #     [
+    #         "https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.5/css/bulma.min.css",
+    #         "https://wikiki.github.io/css/documentation.css"
+    #     ]
+    # )
+    return JSCall.div(s, b, t)
 end
 
 app = JSCall.Application(

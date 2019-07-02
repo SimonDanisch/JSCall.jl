@@ -147,6 +147,17 @@ function handle_ws_message(session::Session, message)
     end
 end
 
+function wait_timeout(condition, error_msg, timeout = 5.0)
+    start_time = time()
+    while !condition()
+        sleep(0.001)
+        if (time() - start_time) > timeout
+            error(error_msg)
+        end
+    end
+    return true
+end
+
 
 """
     handles a new websocket connection to a session
@@ -167,15 +178,12 @@ function websocket_handler(
                 close(session.connection[])
             end
             session.connection[] = websocket
-            if isopen(websocket)
-                # Register all Observables that got put in our session
-                # via e.g. display/jsrender
-                register_obs!(session)
-                # send all queued messages
-                send_queued(session)
-            else
-                @error "Websocket not open, can't register observables"
-            end
+            wait_timeout(()-> isopen(websocket), "Websocket not open after waiting 5.0")
+            # Register all Observables that got put in our session
+            # via e.g. display/jsrender
+            register_obs!(session)
+            # send all queued messages
+            send_queued(session)
             while isopen(websocket)
                 try
                     handle_ws_message(session, read(websocket))
