@@ -40,29 +40,9 @@ function JSCall.jsrender(session::Session, ::ThreeScene)
     return dom
 end
 
-div(ThreeScene())
 
 using JSCall, Observables
 using JSCall: Dependency, div, @js_str, font, onjs, Button, TextField, Slider, JSString
-
-s = Slider(1:10)
-b = Button("hi")
-t = TextField("lol")
-on(s) do value
-    println(value)
-end
-on(t) do text
-    println(text)
-end
-bulma = Dependency(
-    :Bulma,
-    [
-        "https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.5/css/bulma.min.css",
-        "https://wikiki.github.io/css/documentation.css?v=201904261505"
-    ]
-)
-
-JSCall.div(bulma, s, b, t)
 
 
 function dom_handler(session, request)
@@ -79,7 +59,7 @@ function dom_handler(session, request)
         :Bulma,
         [
             "https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.5/css/bulma.min.css",
-            "https://wikiki.github.io/css/documentation.css?v=201904261505"
+            "https://wikiki.github.io/css/documentation.css"
         ]
     )
     return JSCall.div(bulma, s, b, t)
@@ -89,5 +69,5 @@ app = JSCall.Application(
     dom_handler,
     get(ENV, "WEBIO_SERVER_HOST_URL", "127.0.0.1"),
     parse(Int, get(ENV, "WEBIO_HTTP_PORT", "8081")),
-    verbose = true
+    verbose = false
 )

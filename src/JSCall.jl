@@ -1,13 +1,13 @@
 module JSCall
 
 import AssetRegistry, Sockets
-using UUIDs, Hyperscript, Hyperscript, JSON, Observables
+using UUIDs, Hyperscript, Hyperscript, JSON3, Observables
 import Sockets: send
 using Hyperscript: Node, children, tag
 using HTTP
 using HTTP: Response, Request
 using HTTP.Streams: Stream
-using HTTP.WebSockets: WebSocket
+using WebSockets
 using Base64
 
 include("types.jl")

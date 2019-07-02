@@ -7,9 +7,9 @@ const JavascriptWarning = "4"
 
 function stream_handler(application::Application, stream::Stream)
     try
-        if HTTP.WebSockets.is_upgrade(stream.message)
-            HTTP.WebSockets.upgrade(stream) do websocket
-                websocket_handler(application, stream.message, websocket)
+        if WebSockets.is_upgrade(stream)
+            WebSockets.upgrade(stream) do request, websocket
+                websocket_handler(application, request, websocket)
             end
             return
         end
@@ -130,7 +130,7 @@ Handles the incoming websocket messages from the frontend
 """
 function handle_ws_message(session::Session, message)
     isempty(message) && return
-    data = JSON.parse(String(message))
+    data = JSON3.read(String(message))
     typ = data["type"]
     if typ == UpdateObservable
         registered, obs = session.observables[data["id"]]
@@ -178,9 +178,11 @@ function websocket_handler(
             end
             while isopen(websocket)
                 try
-                    handle_ws_message(session, HTTP.WebSockets.readframe(websocket))
+                    handle_ws_message(session, read(websocket))
                 catch e
-                    @warn "handle ws error" exception=e
+                    if !(e isa WebSockets.WebSocketClosedError)
+                        @warn "handle ws error" exception=e
+                    end
                 end
             end
             close(session)

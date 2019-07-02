@@ -51,7 +51,7 @@ When sent to the frontend, the final javascript string will be constructed as:
 ```
 """
 tojsstring(x) = sprint(io-> tojsstring(io, x))
-tojsstring(io::IO, x) = JSON.print(io, x)
+tojsstring(io::IO, x) = JSON3.write(io, x)
 tojsstring(io::IO, x::Observable) = print(io, "'", x.id, "'")
 
 # Handle interpolation into javascript

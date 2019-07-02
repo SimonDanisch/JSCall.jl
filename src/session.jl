@@ -57,7 +57,7 @@ end
 Send values to the frontend via JSON for now
 """
 function Sockets.send(session::Session; kw...)
-    new_msg = JSON.json(kw)
+    new_msg = JSON3.write(kw)
     if isopen(session)
         # send all queued messages
         send_queued(session)
