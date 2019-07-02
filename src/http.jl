@@ -50,23 +50,21 @@ function dom2html(io::IO, session::Session, sessionid::String, dom)
     # insert the javascript for JSCall
     print(io, """
         <script>
-        window.js_call_session_id = $(repr(sessionid))
-    """)
+            window.js_call_session_id = $(repr(sessionid))
+        """)
     if !isempty(url_proxy[])
         print(io, """
             window.websocket_proxy_url = $(repr(url_proxy[]))
-            """
-        )
+        """)
     end
     println(io, """
         function __on_document_load__(){
-        """
-    )
+    """)
     # create a function we call in body onload =, which loads all
     # on_document_load javascript
     tojsstring(io, session.on_document_load)
     print(io, """
-        }
+            }
         </script>
         """
     )

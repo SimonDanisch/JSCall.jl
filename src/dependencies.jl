@@ -84,7 +84,7 @@ function tojsstring(io::IO, asset::Asset)
     if mediatype(asset) == :js
         println(
             io,
-            "<script type=\"text/javascript\" charset=\"utf-8\" src = $(repr(url(asset)))></script>"
+            "<script src=$(repr(url(asset)))></script>"
         )
     elseif mediatype(asset) == :css
         println(
