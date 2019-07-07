@@ -57,7 +57,7 @@ struct Sym
     Sym(x) = new(Symbol(x))
 end
 
-const object_pool_identifier = Sym("window.object_pool")
+const object_pool_identifier = Sym("WebIO.object_pool")
 
 """
 Removes an JSObject from the object pool!
@@ -230,7 +230,7 @@ end
 function get_queue!(scope::Scope; init_batchmode = true)
     id = objectid(scope)
     batchmode, queue = get!(eval_queue, id) do
-        finalizer(scope) do
+        finalizer(scope) do s
             delete!(eval_queue, id)
         end
         (init_batchmode, JSString[])
@@ -334,14 +334,14 @@ function make_renderable!(jsm::JSModule)
     return jsm.display_func(jsm.scope)
 end
 
-function Base.show(io::IO, m::MIME"text/html", jsm::JSModule)
-    Base.show(io, m, make_renderable!(jsm))
+function Base.show(
+        io::IO, m::WebIO.WEBIO_NODE_MIME, x::JSModule
+    )
+    return show(io, m, WebIO.render(x))
 end
-function Base.show(io::IO, m::WebIO.WEBIO_APPLICATION_MIME, jsm::JSModule)
-    Base.show(io, m, make_renderable!(jsm))
-end
-function Base.show(io::IO, m::MIME"application/prs.juno.plotpane+html", jsm::JSModule)
-    Base.show(io, m, make_renderable!(jsm))
+
+function WebIO.render(jsm::JSModule)
+    WebIO.render(make_renderable!(jsm))
 end
 
 """
