@@ -237,6 +237,7 @@ function get_queue!(scope::Scope; init_batchmode = true)
     end
     return batchmode, queue
 end
+
 """
     eval_queue!(scope::Scope)
 Evals all the js code that queued up, empties queue & sets batchmode to false.
@@ -315,6 +316,7 @@ struct JSModule <: AbstractJSObject
     mod::JSObject
     document::JSObject
     window::JSObject
+    this::JSObject
     display_func # A function that gets called on show with the modules Scope
 end
 scope(x::JSModule) = getfield(x, :scope)
@@ -327,6 +329,7 @@ function make_renderable!(jsm::JSModule)
             $(object_pool_identifier)[$(uuidstr(jsm.mod))] = mod
             $(object_pool_identifier)[$(uuidstr(jsm.document))] = document
             $(object_pool_identifier)[$(uuidstr(jsm.window))] = window
+            $(object_pool_identifier)[$(uuidstr(jsm.this))] = this
             $(jss) // execute all queued statements in onimport
         }
     """
@@ -363,7 +366,8 @@ function JSModule(display_func, name::Symbol, url::String)
     mod = JSObject(name, scope, :module)
     document = JSObject(:document, scope, :module)
     window = JSObject(:window, scope, :module)
-    return JSModule(scope, mod, document, window, display_func)
+    this = JSObject(:window, scope, :module)
+    return JSModule(scope, mod, document, window, this, display_func)
 end
 
 using JSExpr: jsexpr
