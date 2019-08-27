@@ -1,7 +1,7 @@
 name = "JSCall"
 uuid = "7408c33d-3899-58ec-b6f6-b7e67cfb9908"
 authors = ["SimonDanisch <sdanisch@gmail.com>"]
-version = "0.1.0"
+version = "0.2.0"
 
 [deps]
 JSExpr = "97c1335a-c9c5-57fe-bc5d-ec35cebe8660"
